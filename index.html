@@ -1,0 +1,69 @@
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Nagare — Agency Flow OS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="stylesheet" href="assets/css/style.css?v=2" />
+
+<!-- ============ LOGIN / ROLE SELECT ============ -->
+<div id="login" class="login">
+  <div class="login-card">
+    <div class="brand">
+      <div class="brand-mark">流</div>
+      <div>
+        <h1>Nagare</h1>
+        <p class="tag">Agency Flow OS · by Antrajaal</p>
+      </div>
+    </div>
+    <p class="login-sub">Choose how you want to sign in. (Prototype — no password needed yet.)</p>
+
+    <div class="login-tabs">
+      <button class="ltab active" data-side="team">Agency / Team</button>
+      <button class="ltab" data-side="client">Client</button>
+    </div>
+
+    <div id="login-list" class="login-list"></div>
+  </div>
+  <p class="login-foot">Prototype build · data lives only in this browser</p>
+</div>
+
+<!-- ============ APP SHELL ============ -->
+<div id="app" class="app hidden">
+  <aside class="sidebar">
+    <div class="brand small">
+      <div class="brand-mark">流</div>
+      <div><h1>Nagare</h1></div>
+    </div>
+    <nav id="nav" class="nav"></nav>
+    <div class="side-foot">
+      <div id="whoami" class="whoami"></div>
+      <button id="logout" class="btn-ghost small">Sign out</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div id="page-title" class="page-title">Dashboard</div>
+      <div class="topbar-actions">
+        <button id="bell" class="bell" title="Notification log">🔔<span id="bell-count" class="bell-count hidden">0</span></button>
+      </div>
+    </header>
+    <div id="view" class="view"></div>
+  </main>
+</div>
+
+<!-- Notification drawer -->
+<div id="notif-drawer" class="drawer hidden">
+  <div class="drawer-head">
+    <strong>Outbound messages</strong>
+    <span class="muted small">WhatsApp + Email (simulated)</span>
+    <button id="notif-close" class="btn-ghost small">Close</button>
+  </div>
+  <div id="notif-list" class="notif-list"></div>
+</div>
+<div id="scrim" class="scrim hidden"></div>
+
+<!-- Modal host -->
+<div id="modal-host"></div>
+
+<script src="assets/js/store.js"></script>
+<script src="assets/js/app.js"></script>
