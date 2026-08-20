@@ -6,7 +6,7 @@
   <meta name="csrf-token" content="{{ csrf_token() }}" />
   <title>Nagare — Agency Flow OS</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}?v=4" />
+  <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}?v=10" />
 </head>
 <body>
   <div id="login" class="login">
@@ -33,7 +33,7 @@
   <div id="notif-drawer" class="drawer hidden"><div class="drawer-head"><strong>Outbound messages</strong><span class="muted small">WhatsApp + Email (simulated)</span><button id="notif-close" class="btn-ghost small">Close</button></div><div id="notif-list" class="notif-list"></div></div>
   <div id="scrim" class="scrim hidden"></div>
   <div id="modal-host"></div>
-  <script src="{{ asset('assets/js/store.js') }}?v=5"></script>
-  <script src="{{ asset('assets/js/app.js') }}?v=5"></script>
+  <script src="{{ asset('assets/js/store.js') }}?v=6"></script>
+  <script src="{{ asset('assets/js/app.js') }}?v=10"></script>
 </body>
 </html>

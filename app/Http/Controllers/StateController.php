@@ -17,9 +17,9 @@ class StateController extends Controller
     public function update(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'clients' => ['required','array'], 'users' => ['required','array'], 'tasks' => ['required','array'],
-            'messages' => ['required','array'], 'activity' => ['required','array'], 'notifications' => ['required','array'],
-            'rules' => ['required','array'], 'settings' => ['required','array'],
+            'clients' => ['present','array'], 'users' => ['present','array'], 'projects' => ['present','array'], 'tasks' => ['present','array'],
+            'messages' => ['present','array'], 'activity' => ['present','array'], 'notifications' => ['present','array'],
+            'rules' => ['present','array'], 'settings' => ['required','array'],
         ]);
         DB::transaction(fn () => $this->replaceState($data));
         return response()->json(['saved' => true]);
@@ -54,7 +54,8 @@ class StateController extends Controller
         return [
             'users' => DB::table('users')->get()->map(fn($r)=>['id'=>$r->id,'name'=>$r->name,'role'=>$r->role,'dept'=>$r->department,'clientId'=>$r->client_id,'company'=>$r->company,'email'=>$r->email,'phone'=>$r->phone,'color'=>$r->color])->all(),
             'clients' => DB::table('clients')->get()->map(fn($r)=>['id'=>$r->id,'name'=>$r->name,'company'=>$r->company,'email'=>$r->email,'phone'=>$r->phone,'color'=>$r->color])->all(),
-            'tasks' => DB::table('tasks')->get()->map(fn($r)=>['id'=>$r->id,'clientId'=>$r->client_id,'title'=>$r->title,'desc'=>$r->description,'dept'=>$r->department,'ownerId'=>$r->owner_id,'status'=>$r->status,'priority'=>$r->priority,'createdAt'=>(int)$r->created_at_ms,'stageAt'=>(int)$r->stage_at_ms,'dueDate'=>$r->due_date_ms ? (int)$r->due_date_ms : null,'recurring'=>$r->recurring,'attachments'=>json_decode($r->attachments ?? '[]', true) ?: []])->all(),
+            'projects' => Schema::hasTable('projects') ? DB::table('projects')->get()->map(fn($r)=>['id'=>$r->id,'clientId'=>$r->client_id,'name'=>$r->name,'desc'=>$r->description,'status'=>$r->status,'dueDate'=>$r->due_date_ms ? (int)$r->due_date_ms : null])->all() : [],
+            'tasks' => DB::table('tasks')->get()->map(fn($r)=>['id'=>$r->id,'clientId'=>$r->client_id,'projectId'=>$r->project_id ?? null,'title'=>$r->title,'desc'=>$r->description,'dept'=>$r->department,'ownerId'=>$r->owner_id,'status'=>$r->status,'priority'=>$r->priority,'createdAt'=>(int)$r->created_at_ms,'stageAt'=>(int)$r->stage_at_ms,'dueDate'=>$r->due_date_ms ? (int)$r->due_date_ms : null,'recurring'=>$r->recurring,'attachments'=>json_decode($r->attachments ?? '[]', true) ?: []])->all(),
             'messages' => DB::table('messages')->get()->map(fn($r)=>['id'=>$r->id,'clientId'=>$r->client_id,'taskId'=>$r->task_id,'fromId'=>$r->from_id,'fromRole'=>$r->from_role,'text'=>$r->text ?? '', 'voice'=>$r->voice,'at'=>(int)$r->sent_at_ms])->all(),
             'activity' => DB::table('activities')->orderByDesc('occurred_at_ms')->get()->map(fn($r)=>['id'=>$r->id,'at'=>(int)$r->occurred_at_ms,'text'=>$r->text,'type'=>$r->type])->all(),
             'notifications' => DB::table('notifications')->orderByDesc('sent_at_ms')->get()->map(fn($r)=>['id'=>$r->id,'channel'=>$r->channel,'to'=>$r->recipient,'text'=>$r->text,'at'=>(int)$r->sent_at_ms])->all(),
@@ -68,9 +69,10 @@ class StateController extends Controller
         $this->clear(); $now = now();
         DB::table('clients')->insert(array_map(fn($x)=>['id'=>$x['id'],'name'=>$x['name'],'company'=>$x['company'],'email'=>$x['email']??null,'phone'=>$x['phone']??null,'color'=>$x['color']??null,'created_at'=>$now,'updated_at'=>$now],$s['clients']));
         DB::table('users')->insert(array_map(fn($x)=>['id'=>$x['id'],'name'=>$x['name'],'role'=>$x['role'],'department'=>$x['dept']??null,'client_id'=>$x['clientId']??null,'company'=>$x['company']??null,'email'=>$x['email']??null,'phone'=>$x['phone']??null,'color'=>$x['color']??null,'created_at'=>$now,'updated_at'=>$now],$s['users']));
+        DB::table('projects')->insert(array_map(fn($x)=>['id'=>$x['id'],'client_id'=>$x['clientId'],'name'=>$x['name'],'description'=>$x['desc']??null,'status'=>$x['status']??'active','due_date_ms'=>$x['dueDate']??null,'created_at'=>$now,'updated_at'=>$now],$s['projects']));
         $hasAttachments = Schema::hasColumn('tasks', 'attachments');
         DB::table('tasks')->insert(array_map(function ($x) use ($now, $hasAttachments) {
-            $task = ['id'=>$x['id'],'client_id'=>$x['clientId'],'title'=>$x['title'],'description'=>$x['desc']??null,'department'=>$x['dept'],'owner_id'=>$x['ownerId']??null,'status'=>$x['status'],'priority'=>$x['priority'],'created_at_ms'=>$x['createdAt'],'stage_at_ms'=>$x['stageAt'],'due_date_ms'=>$x['dueDate']??null,'recurring'=>$x['recurring']??null,'created_at'=>$now,'updated_at'=>$now];
+            $task = ['id'=>$x['id'],'client_id'=>$x['clientId'],'project_id'=>$x['projectId']??null,'title'=>$x['title'],'description'=>$x['desc']??null,'department'=>$x['dept'],'owner_id'=>$x['ownerId']??null,'status'=>$x['status'],'priority'=>$x['priority'],'created_at_ms'=>$x['createdAt'],'stage_at_ms'=>$x['stageAt'],'due_date_ms'=>$x['dueDate']??null,'recurring'=>$x['recurring']??null,'created_at'=>$now,'updated_at'=>$now];
             if ($hasAttachments) $task['attachments'] = json_encode($x['attachments'] ?? []);
             return $task;
         }, $s['tasks']));
@@ -84,7 +86,7 @@ class StateController extends Controller
     private function clear(): void
     {
         DB::statement('SET FOREIGN_KEY_CHECKS=0');
-        foreach (['settings','delegation_rules','notifications','activities','messages','tasks','users','clients'] as $table) DB::table($table)->delete();
+        foreach (['settings','delegation_rules','notifications','activities','messages','tasks','projects','users','clients'] as $table) if (Schema::hasTable($table)) DB::table($table)->delete();
         DB::statement('SET FOREIGN_KEY_CHECKS=1');
     }
 }

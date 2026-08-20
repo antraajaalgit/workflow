@@ -11,6 +11,7 @@ let routeParam = null;
 const esc = (s='') => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const userById = id => S().users.find(u => u.id === id);
 const clientById = id => S().clients.find(c => c.id === id);
+const projectById = id => (S().projects || []).find(p => p.id === id);
 const tasksOf = cid => S().tasks.filter(t => t.clientId === cid);
 const initials = n => n.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
 
@@ -89,13 +90,6 @@ function delegate(text){
   }
   return 'Design'; // fallback
 }
-function pickOwner(dept){
-  const members = S().users.filter(u => u.role==='team' && u.dept===dept);
-  if (!members.length) return null;
-  // least-loaded (Heijunka): fewest active tasks
-  members.sort((a,b)=> activeLoad(a.id) - activeLoad(b.id));
-  return members[0].id;
-}
 function activeLoad(uid){ return S().tasks.filter(t=>t.ownerId===uid && ACTIVE.includes(t.status)).length; }
 
 /* ============================================================
@@ -142,6 +136,7 @@ function renderWho(){
 const NAV = {
   admin: [
     {id:'dashboard', ic:'📊', label:'Dashboard'},
+    {id:'projects', ic:'📌', label:'Projects'},
     {id:'andon', ic:'🚦', label:'Andon Board'},
     {id:'kanban', ic:'🗂️', label:'Kanban'},
     {id:'clients', ic:'📁', label:'Client Folders'},
@@ -179,12 +174,12 @@ function go(r, param=null){ route=r; routeParam=param; buildNav(); render(); }
 /* ============================================================
    RENDER ROUTER
 ============================================================ */
-const TITLES = {dashboard:'Dashboard', andon:'Andon Board', kanban:'Kanban Flow', clients:'Client Folders', inbox:'Inbox', recurring:'Recurring Tasks', team:'Team & Workload', settings:'Settings', 'my-requests':'My Requests', 'new-request':'New Request', messages:'Messages', 'client-folder':'Client Folder'};
+const TITLES = {dashboard:'Dashboard', projects:'Projects', andon:'Andon Board', kanban:'Kanban Flow', clients:'Client Folders', inbox:'Inbox', recurring:'Recurring Tasks', team:'Team & Workload', settings:'Settings', 'my-requests':'My Requests', 'new-request':'New Request', messages:'Messages', 'client-folder':'Client Folder'};
 function render(){
   $('#page-title').textContent = TITLES[route] || '';
   const v = $('#view');
   const R = {
-    dashboard: viewDashboard, andon: viewAndon, kanban: viewKanban,
+    dashboard: viewDashboard, projects: viewProjects, andon: viewAndon, kanban: viewKanban,
     clients: viewClients, 'client-folder': viewClientFolder, inbox: viewInbox,
     recurring: viewRecurring, team: viewTeam, settings: viewSettings,
     'my-requests': viewMyRequests, 'new-request': viewNewRequest, messages: viewMessages,
@@ -226,6 +221,7 @@ function viewDashboard(){
     </div>`).join('');
 
   return `
+    ${session.role==='admin'?'<div class="section-head"><div></div><button class="btn" data-add-project>+ Add project</button></div>':session.role==='team'?'<div class="section-head"><div><h2>My work</h2><p class="muted small">Create and manage tasks assigned to you.</p></div><button class="btn" data-add-team-task>+ Add task</button></div>':''}
     <div class="grid cols-4" style="margin-bottom:22px">
       ${kpi(active.length, 'Active tasks')}
       ${kpi(red.length, 'Stuck (red) 🔴', red.length?'Needs attention':'All clear', red.length?'var(--red)':'var(--green)')}
@@ -243,6 +239,122 @@ function viewDashboard(){
     </div>
     <div class="card" style="margin-top:16px"><h3>Live activity (Gemba feed)</h3><div class="list">${feed||'<span class="muted">No activity yet</span>'}</div></div>
   `;
+}
+
+/* ---------- PROJECTS ---------- */
+function viewProjects(){
+  const projects = S().projects || [];
+  const cards = projects.map(p=>{
+    const c=clientById(p.clientId); const tasks=S().tasks.filter(t=>t.projectId===p.id);
+    const complete=tasks.filter(t=>t.status==='done').length;
+    const progress=tasks.length?Math.round(complete/tasks.length*100):0;
+    return `<div class="project-card">
+      <div class="project-card-head">
+        <div class="project-icon">📌</div>
+        <div class="project-actions">
+          <button class="project-menu-btn" data-project-menu="${p.id}" aria-label="Project actions" aria-expanded="false">⋮</button>
+          <div class="project-menu hidden" data-project-menu-popup="${p.id}">
+            <button data-edit-project="${p.id}"><span>✏️</span>Edit project</button>
+            <button class="danger" data-delete-project="${p.id}"><span>🗑️</span>Delete project</button>
+          </div>
+        </div>
+      </div>
+      <div class="project-client">${esc(c?.company||'Unknown client')}</div>
+      <h3>${esc(p.name)}</h3>
+      ${p.desc?`<p>${esc(p.desc)}</p>`:'<p class="muted">No project description</p>'}
+      <div class="project-progress"><div><span>Progress</span><b>${complete}/${tasks.length} tasks</b></div><div class="bar"><i style="width:${progress}%"></i></div></div>
+      <div class="project-card-foot"><span>${p.dueDate?'📅 '+new Date(p.dueDate).toLocaleDateString():'No due date'}</span><span class="status-pill st-${p.status||'new'}">${esc(p.status||'active')}</span></div>
+    </div>`;
+  }).join('');
+  return `<div class="section-head"><p class="muted">Create a project and assign every task to a specific team member.</p><button class="btn" data-add-project>+ Add project</button></div>
+    <div class="folder-grid">${cards||'<div class="empty"><div class="e-ic">📌</div>No projects yet</div>'}</div>`;
+}
+
+function projectTaskRow(index, task=null){
+  const members=S().users.filter(u=>u.role==='team');
+  return `<div class="project-task-row" data-project-task="${index}" ${task?`data-task-id="${task.id}"`:''}>
+    <div class="project-task-head"><div class="project-task-number">${index+1}</div><div><b>${task?'Existing task':'New task'}</b><span>${task?'Update its details or assignment':'Define and assign this task'}</span></div><button class="btn-ghost small" type="button" data-remove-project-task>Remove</button></div>
+    <div class="field"><label>Task title <span class="req">*</span></label><input data-pt-title value="${esc(task?.title||'')}" placeholder="e.g. Design homepage mockup"></div>
+    <div class="form-row">
+      <div class="field"><label>Assign to <span class="req">*</span></label><select data-pt-owner><option value="">Select team member</option>${members.map(u=>`<option value="${u.id}" ${u.id===task?.ownerId?'selected':''}>${esc(u.name)} · ${esc(u.dept)}</option>`).join('')}</select></div>
+      <div class="field"><label>Priority</label><select data-pt-priority>${['low','med','high'].map(p=>`<option value="${p}" ${(task?.priority||'med')===p?'selected':''}>${p==='med'?'Medium':p[0].toUpperCase()+p.slice(1)}</option>`).join('')}</select></div>
+    </div>
+    <div class="field"><label>Description</label><textarea data-pt-desc rows="2" placeholder="What needs to be done?">${esc(task?.desc||'')}</textarea></div>
+    <div class="field project-task-attachments" style="margin-bottom:0"><label>Attachments</label><label class="attachment-upload"><input type="file" data-pt-files multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"><span>📎 Choose images, PDFs or documents</span></label><div class="hint">Up to 5 MB total per task.</div><div data-pt-file-list class="attachment-list"></div></div>
+  </div>`;
+}
+
+function renderProjectTaskFiles(row){
+  const list=$('[data-pt-file-list]',row),attachments=row._attachments||[];
+  list.innerHTML=attachments.map(a=>`<div class="attachment-item"><span>${String(a.type||'').startsWith('image/')?'🖼️':'📄'}</span><div><b>${esc(a.name)}</b><small>${formatFileSize(a.size||0)}</small></div><button class="btn-ghost small" type="button" data-remove-pt-file="${a.id}">Remove</button></div>`).join('');
+  $$('[data-remove-pt-file]',list).forEach(btn=>btn.onclick=()=>{row._attachments=attachments.filter(a=>a.id!==btn.dataset.removePtFile);renderProjectTaskFiles(row);});
+}
+
+function bindProjectTaskFiles(list){
+  $$('[data-project-task]',list).forEach(row=>{
+    if(!row._attachments){const existing=row.dataset.taskId?S().tasks.find(t=>t.id===row.dataset.taskId):null;row._attachments=[...(existing?.attachments||[])];row._reading=0;}
+    renderProjectTaskFiles(row);
+    const input=$('[data-pt-files]',row);input.onchange=()=>{
+      let total=row._attachments.reduce((sum,a)=>sum+(a.size||0),0);
+      [...input.files].forEach(file=>{
+        if(total+file.size>5*1024*1024){toast('Attachments can be up to 5 MB per task');return;}
+        total+=file.size;row._reading++;const reader=new FileReader();
+        reader.onload=()=>{row._attachments.push({id:'a_'+Math.random().toString(36).slice(2,9),name:file.name,type:file.type||'application/octet-stream',size:file.size,data:reader.result});renderProjectTaskFiles(row);};
+        reader.onloadend=()=>{row._reading--;};reader.readAsDataURL(file);
+      });
+      input.value='';
+    };
+  });
+}
+
+function openProjectForm(projectId=null){
+  const project=projectById(projectId); const editing=!!project;
+  const projectTasks=editing?S().tasks.filter(t=>t.projectId===project.id):[];
+  const clientOpts=S().clients.map(c=>`<option value="${c.id}" ${c.id===project?.clientId?'selected':''}>${esc(c.company)}</option>`).join('');
+  const dueValue=project?.dueDate?new Date(project.dueDate).toISOString().slice(0,10):'';
+  const modal=document.createElement('div'); modal.className='modal-scrim';
+  modal.innerHTML=`<div class="modal project-modal"><div class="modal-head"><div><h2>${editing?'Edit project':'Create a new project'}</h2><p class="muted small">${editing?'Update project details, assignments, or add more tasks.':'Plan the work and assign ownership from the start.'}</p></div><button class="btn-ghost" data-close>✕</button></div>
+    <div class="modal-body">
+      <div class="project-form-section"><h3>Project details</h3><div class="form-row"><div class="field"><label>Project name <span class="req">*</span></label><input id="project-name" value="${esc(project?.name||'')}" placeholder="e.g. Website redesign"></div><div class="field"><label>Client <span class="req">*</span></label><select id="project-client">${clientOpts}</select></div></div>
+      <div class="field"><label>Description</label><textarea id="project-desc" placeholder="Project scope and goals">${esc(project?.desc||'')}</textarea></div>
+      <div class="field"><label>Due date</label><input id="project-due" type="date" value="${dueValue}"></div></div>
+      <div class="project-form-section"><div class="section-head"><div><h3>Task list</h3><p class="muted small">Every task must have one accountable team member.</p></div><button class="btn-2 small" type="button" id="add-project-task">+ Add task</button></div>
+      <div id="project-task-list">${projectTasks.length?projectTasks.map((t,i)=>projectTaskRow(i,t)).join(''):projectTaskRow(0)}</div></div>
+    </div><div class="modal-foot"><button class="btn-ghost" data-close>Cancel</button><button class="btn" id="save-project">${editing?'Save changes':'Create project'}</button></div></div>`;
+  $('#modal-host').appendChild(modal);
+  const close=()=>modal.remove(); modal.querySelectorAll('[data-close]').forEach(b=>b.onclick=close); modal.onclick=e=>{if(e.target===modal)close();};
+  const list=$('#project-task-list',modal);
+  const renumber=()=>$$('[data-project-task]',list).forEach((row,i)=>{$('.project-task-number',row).textContent=i+1;});
+  const bindRemove=()=>$$('[data-remove-project-task]',list).forEach(b=>b.onclick=()=>{b.closest('[data-project-task]').remove();renumber();});
+  bindRemove();bindProjectTaskFiles(list);
+  $('#add-project-task',modal).onclick=()=>{list.insertAdjacentHTML('beforeend',projectTaskRow($$('[data-project-task]',list).length));bindRemove();bindProjectTaskFiles(list);};
+  $('#save-project',modal).onclick=async()=>{
+    const name=$('#project-name',modal).value.trim(); const rows=$$('[data-project-task]',list);
+    if(!name){toast('Enter a project name');return;}
+    if(!rows.length){toast('Add at least one task');return;}
+    if(rows.some(row=>row._reading>0)){toast('Please wait for attachments to finish loading');return;}
+    const invalid=rows.some(row=>!$('[data-pt-title]',row).value.trim()||!$('[data-pt-owner]',row).value);
+    if(invalid){toast('Every task needs a title and assigned team member');return;}
+    const id=project?.id||'p_'+Math.random().toString(36).slice(2,9), clientId=$('#project-client',modal).value, now=Date.now();
+    const due=$('#project-due',modal).value?new Date($('#project-due',modal).value).getTime():null;
+    if(project) Object.assign(project,{clientId,name,desc:$('#project-desc',modal).value.trim(),dueDate:due});
+    else S().projects.push({id,clientId,name,desc:$('#project-desc',modal).value.trim(),status:'active',dueDate:due});
+    const retainedIds=rows.map(row=>row.dataset.taskId).filter(Boolean);
+    const removedIds=projectTasks.filter(t=>!retainedIds.includes(t.id)).map(t=>t.id);
+    S().tasks=S().tasks.filter(t=>!removedIds.includes(t.id));
+    S().messages.forEach(m=>{if(removedIds.includes(m.taskId))m.taskId=null;});
+    rows.forEach(row=>{const owner=userById($('[data-pt-owner]',row).value);const existing=row.dataset.taskId?S().tasks.find(t=>t.id===row.dataset.taskId):null;const values={projectId:id,clientId,title:$('[data-pt-title]',row).value.trim(),desc:$('[data-pt-desc]',row).value.trim(),dept:owner.dept,ownerId:owner.id,priority:$('[data-pt-priority]',row).value,dueDate:due,attachments:row._attachments||[]};if(existing)Object.assign(existing,values);else S().tasks.push({id:'t_'+Math.random().toString(36).slice(2,9),...values,status:'todo',createdAt:now,stageAt:now,recurring:null});});
+    try{await Store.save();logActivity(`Project "${name}" ${editing?'updated':'created'} with ${rows.length} assigned task${rows.length===1?'':'s'}`,'brief');close();go('projects');toast(editing?'✅ Project updated':'✅ Project and tasks created');}catch(error){await Store.load();render();toast(error.message);}
+  };
+}
+
+async function deleteProject(projectId){
+  const project=projectById(projectId); if(!project)return;
+  const taskIds=S().tasks.filter(t=>t.projectId===projectId).map(t=>t.id);
+  if(!confirm(`Delete "${project.name}" and its ${taskIds.length} task${taskIds.length===1?'':'s'}? This cannot be undone.`))return;
+  S().projects=S().projects.filter(p=>p.id!==projectId); S().tasks=S().tasks.filter(t=>t.projectId!==projectId);
+  S().messages.forEach(m=>{if(taskIds.includes(m.taskId))m.taskId=null;});
+  try{await Store.save();render();buildNav();toast('🗑️ Project deleted');}catch(error){await Store.load();render();toast(error.message);}
 }
 
 /* ---------- ANDON BOARD ---------- */
@@ -324,10 +436,10 @@ function viewClients(){
     const ts = tasksOf(c.id);
     const active = ts.filter(t=>ACTIVE.includes(t.status)).length;
     const red = ts.filter(t=>andonLevel(t)==='red').length;
-    return `<div class="folder" data-client="${c.id}">
-      <div class="f-ic">📁</div>
+    return `<div class="folder client-folder-card" data-client="${c.id}">
+      <div class="client-card-head"><div class="f-ic">📁</div>${session.role==='admin'?`<div class="project-actions"><button class="project-menu-btn" data-client-menu="${c.id}" aria-label="Client actions" aria-expanded="false">⋮</button><div class="project-menu hidden" data-client-menu-popup="${c.id}"><button data-edit-client="${c.id}"><span>✏️</span>Edit client</button><button class="danger" data-delete-client="${c.id}"><span>🗑️</span>Delete client</button></div></div>`:''}</div>
       <b>${esc(c.company)}</b>
-      <div class="f-meta">${esc(c.name)} · ${esc(c.email)}</div>
+      <div class="f-meta">${esc(c.name)} · ${esc(c.email||'No email')}</div>
       <div class="f-stats">
         <div><b>${ts.length}</b><span class="muted">total</span></div>
         <div><b>${active}</b><span class="muted">active</span></div>
@@ -335,7 +447,7 @@ function viewClients(){
       </div>
     </div>`;
   }).join('');
-  return `<p class="muted" style="margin-bottom:16px">Every client has a dedicated folder — all their briefs, files, voice notes and the full conversation in one place.</p><div class="folder-grid">${folders}</div>`;
+  return `<div class="section-head"><p class="muted">Every client has a dedicated folder — all their briefs, files, voice notes and the full conversation in one place.</p>${session.role==='admin'?'<button class="btn" data-add-client>+ Add client</button>':''}</div><div class="folder-grid">${folders||'<div class="empty"><div class="e-ic">📁</div>No clients yet</div>'}</div>`;
 }
 function viewClientFolder(){
   const c = clientById(routeParam);
@@ -354,6 +466,7 @@ function viewClientFolder(){
     <div class="back-link" data-go="clients">← All clients</div>
     <div class="section-head">
       <div style="display:flex;align-items:center;gap:14px">${avatar(c)}<div><h2>${esc(c.company)}</h2><span class="muted small">${esc(c.name)} · ${esc(c.email)} · ${esc(c.phone)}</span></div></div>
+      ${session.role==='admin'?`<div><button class="btn-ghost" data-edit-client="${c.id}">Edit client</button><button class="btn-ghost btn-delete-client" data-delete-client="${c.id}">Delete client</button></div>`:''}
     </div>
     <div class="grid" style="grid-template-columns:1fr 1fr">
       <div class="card"><h3>📋 Work & briefs (${ts.length})</h3><div class="list">${taskList||'<span class="muted">No tasks</span>'}</div></div>
@@ -363,6 +476,36 @@ function viewClientFolder(){
         ${composerHTML(c.id, null)}
       </div>
     </div>`;
+}
+
+function openClientForm(clientId=null){
+  if(session.role!=='admin')return;
+  const client=clientById(clientId),editing=!!client;
+  const modal=document.createElement('div');modal.className='modal-scrim';
+  modal.innerHTML=`<div class="modal"><div class="modal-head"><div><h2>${editing?'Edit client':'Add new client'}</h2><p class="muted small">${editing?'Keep the client profile and login details up to date.':'A client folder and client login will be created together.'}</p></div><button class="btn-ghost" data-close>✕</button></div>
+    <div class="modal-body">
+      <div class="form-row"><div class="field"><label>Contact name <span class="req">*</span></label><input id="client-name" value="${esc(client?.name||'')}" placeholder="e.g. Priya Nair"></div><div class="field"><label>Company <span class="req">*</span></label><input id="client-company" value="${esc(client?.company||'')}" placeholder="e.g. Lumen Cafe"></div></div>
+      <div class="form-row"><div class="field"><label>Email <span class="req">*</span></label><input id="client-email" type="email" value="${esc(client?.email||'')}" placeholder="client@company.com"></div><div class="field"><label>Phone <span class="req">*</span></label><input id="client-phone" type="tel" value="${esc(client?.phone||'')}" placeholder="+91 98765 43210"></div></div>
+      <div class="field"><label>Folder color</label><div class="color-field"><input id="client-color" type="color" value="${esc(client?.color||'#7a5c3e')}"><span class="muted small">Used for the client avatar and visual identity.</span></div></div>
+    </div><div class="modal-foot"><button class="btn-ghost" data-close>Cancel</button><button class="btn" id="save-client">${editing?'Save changes':'Create client'}</button></div></div>`;
+  $('#modal-host').appendChild(modal);const close=()=>modal.remove();modal.querySelectorAll('[data-close]').forEach(b=>b.onclick=close);modal.onclick=e=>{if(e.target===modal)close();};
+  $('#save-client',modal).onclick=async()=>{
+    const name=$('#client-name',modal).value.trim(),company=$('#client-company',modal).value.trim(),email=$('#client-email',modal).value.trim(),phone=$('#client-phone',modal).value.trim(),color=$('#client-color',modal).value;
+    if(!name||!company||!email||!phone){toast('Complete all required client fields');return;}
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){toast('Enter a valid email address');return;}
+    const duplicate=S().clients.some(c=>c.id!==clientId&&String(c.email||'').toLowerCase()===email.toLowerCase());if(duplicate){toast('A client with this email already exists');return;}
+    if(client){Object.assign(client,{name,company,email,phone,color});const login=S().users.find(u=>u.role==='client'&&(u.clientId===client.id||u.id===client.id));if(login)Object.assign(login,{name,company,email,phone,color,clientId:client.id});}
+    else{const id='c_'+Math.random().toString(36).slice(2,9);S().clients.push({id,name,company,email,phone,color});S().users.push({id,name,role:'client',dept:null,clientId:id,company,email,phone,color});}
+    try{await Store.save();logActivity(`Client ${company} ${editing?'updated':'added'}`,'brief');close();render();toast(editing?'✅ Client updated':'✅ Client folder created');}catch(error){await Store.load();render();toast(error.message);}
+  };
+}
+
+async function deleteClient(clientId){
+  if(session.role!=='admin')return;const client=clientById(clientId);if(!client)return;
+  const taskIds=S().tasks.filter(t=>t.clientId===clientId).map(t=>t.id),projectCount=(S().projects||[]).filter(p=>p.clientId===clientId).length;
+  if(!confirm(`Delete ${client.company}? This will also delete ${projectCount} project${projectCount===1?'':'s'}, ${taskIds.length} task${taskIds.length===1?'':'s'}, and all client conversations.`))return;
+  S().messages=S().messages.filter(m=>m.clientId!==clientId);S().tasks=S().tasks.filter(t=>t.clientId!==clientId);S().projects=(S().projects||[]).filter(p=>p.clientId!==clientId);S().users=S().users.filter(u=>!(u.role==='client'&&(u.clientId===clientId||u.id===clientId)));S().clients=S().clients.filter(c=>c.id!==clientId);
+  try{await Store.save();go('clients');toast('🗑️ Client and folder deleted');}catch(error){await Store.load();go('clients');toast(error.message);}
 }
 
 /* ---------- INBOX (all conversations) ---------- */
@@ -418,7 +561,7 @@ function viewTeam(){
       <div class="member-actions"><button class="btn-ghost small" data-edit-member="${u.id}" title="Edit ${esc(u.name)}">✏️ Edit</button><button class="btn-ghost small" data-delete-member="${u.id}" title="Delete ${esc(u.name)}">🗑️</button></div>
     </div>`;
   }).join('');
-  return `<div class="section-head"><p class="muted">Each person owns their queue — accountability is explicit. Load balancing sends new work to the least-loaded person in the right department.</p><button class="btn small" data-add-member>+ Add team member</button></div><div class="list">${rows || '<div class="empty"><div class="e-ic">👥</div>No team members yet</div>'}</div>`;
+  return `<div class="section-head"><p class="muted">Each person owns their queue — accountability is explicit. Admins assign new work directly to a team member.</p><button class="btn small" data-add-member>+ Add team member</button></div><div class="list">${rows || '<div class="empty"><div class="e-ic">👥</div>No team members yet</div>'}</div>`;
 }
 
 function openTeamMember(memberId=null){
@@ -527,7 +670,7 @@ function viewNewRequest(){
   return `
     <div class="card" style="max-width:640px">
       <h2 style="margin-bottom:6px">Send us a new request</h2>
-      <p class="muted small" style="margin-bottom:20px">Tell us what you need. We'll route it to the right team automatically and confirm on WhatsApp + email.</p>
+      <p class="muted small" style="margin-bottom:20px">Tell us what you need. An admin will review it and assign it to a team member.</p>
       <div class="field" id="f-title"><label>What do you need? <span class="req">*</span></label>
         <input id="req-title" placeholder="e.g. Instagram post for our new product"></div>
       <div class="field" id="f-desc"><label>Details <span class="req">*</span></label>
@@ -642,30 +785,55 @@ function submitRequest(){
   $('#f-desc').classList.toggle('err', !desc); if(!desc) ok=false;
   if (!ok){ toast('Please fill the required fields'); return; }
   const dept = delegate(title+' '+desc);
-  const owner = pickOwner(dept);
   const due = $('#req-due').value ? new Date($('#req-due').value).getTime() : Date.now()+86400000;
-  const task = { id:Math.random().toString(36).slice(2,9), clientId:session.clientId, title, desc, dept, ownerId:owner, status:'new', priority:$('#req-prio').value, createdAt:Date.now(), stageAt:Date.now(), dueDate:due, recurring:null, attachments:pendingAttachments };
+  const task = { id:Math.random().toString(36).slice(2,9), projectId:null, clientId:session.clientId, title, desc, dept, ownerId:null, status:'new', priority:$('#req-prio').value, createdAt:Date.now(), stageAt:Date.now(), dueDate:due, recurring:null, attachments:pendingAttachments };
   S().tasks.push(task);
   if (pendingVoice){ sendMessageRaw(session.clientId, task.id, '', pendingVoice); }
   Store.save();
   const c=clientById(session.clientId);
-  const ownerU=userById(owner);
-  logActivity(`New brief from ${c.company} → auto-delegated to ${dept}${ownerU?' ('+ownerU.name+')':''}`,'brief');
+  logActivity(`New brief from ${c.company} awaiting assignment`,'brief');
   // notify agency
   Notify.both({ phone:'+91 agency-team', email:'team@antrajaal.com',
-    waText:`📥 New request from ${c.name} (${c.company}): "${title}" → assigned to ${dept}`,
+    waText:`📥 New request from ${c.name} (${c.company}): "${title}" → awaiting assignment`,
     emailText:`Subject: New brief — ${title}` });
   // confirm to client
   Notify.both({ phone:c.phone, email:c.email,
-    waText:`✅ Hi ${c.name}, we received "${title}" and assigned it to our ${dept} team. We'll keep you posted!`,
+    waText:`✅ Hi ${c.name}, we received "${title}". An admin will assign it shortly.`,
     emailText:`Subject: We got your request — ${title}` });
   pendingVoice=null;
   pendingAttachments=[];
-  toast(`✅ Request sent — routed to ${dept} team`);
+  toast('✅ Request sent — awaiting assignment');
   go('my-requests');
 }
 function sendMessageRaw(clientId, taskId, text, voice){
   S().messages.push({ id:Math.random().toString(36).slice(2,9), clientId, taskId, fromId:session.id, fromRole:'client', text, voice, at:Date.now() });
+}
+
+/* ============================================================
+   TEAM MEMBER TASK CREATION
+============================================================ */
+function openTeamTaskForm(){
+  if(session.role!=='team')return;
+  const clientOpts=S().clients.map(c=>`<option value="${c.id}">${esc(c.company)}</option>`).join('');
+  const projectOpts=(S().projects||[]).map(p=>`<option value="${p.id}" data-client-id="${p.clientId}">${esc(p.name)} · ${esc(clientById(p.clientId)?.company||'')}</option>`).join('');
+  const modal=document.createElement('div');modal.className='modal-scrim';
+  modal.innerHTML=`<div class="modal"><div class="modal-head"><div><h2>Add task</h2><p class="muted small">This task will be assigned to you automatically.</p></div><button class="btn-ghost" data-close>✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Task title <span class="req">*</span></label><input id="team-task-title" placeholder="What needs to be done?"></div>
+      <div class="field"><label>Description</label><textarea id="team-task-desc" placeholder="Add task details"></textarea></div>
+      <div class="form-row"><div class="field"><label>Client <span class="req">*</span></label><select id="team-task-client">${clientOpts}</select></div><div class="field"><label>Project</label><select id="team-task-project"><option value="">Standalone task</option>${projectOpts}</select></div></div>
+      <div class="form-row"><div class="field"><label>Priority</label><select id="team-task-priority"><option value="low">Low</option><option value="med" selected>Medium</option><option value="high">High</option></select></div><div class="field"><label>Due date</label><input id="team-task-due" type="date"></div></div>
+      <div class="assignment-note">${avatar(session)}<div><b>Assigned to ${esc(session.name)}</b><span>${esc(session.dept)} department</span></div></div>
+    </div><div class="modal-foot"><button class="btn-ghost" data-close>Cancel</button><button class="btn" id="save-team-task">Create task</button></div></div>`;
+  $('#modal-host').appendChild(modal);const close=()=>modal.remove();modal.querySelectorAll('[data-close]').forEach(b=>b.onclick=close);modal.onclick=e=>{if(e.target===modal)close();};
+  $('#team-task-project',modal).onchange=e=>{const option=e.target.selectedOptions[0];if(option?.dataset.clientId)$('#team-task-client',modal).value=option.dataset.clientId;};
+  $('#save-team-task',modal).onclick=async()=>{
+    const title=$('#team-task-title',modal).value.trim();if(!title){toast('Enter a task title');return;}
+    const now=Date.now(),due=$('#team-task-due',modal).value?new Date($('#team-task-due',modal).value).getTime():null;
+    const projectId=$('#team-task-project',modal).value||null,linkedProject=projectById(projectId);
+    const task={id:'t_'+Math.random().toString(36).slice(2,9),projectId,clientId:linkedProject?.clientId||$('#team-task-client',modal).value,title,desc:$('#team-task-desc',modal).value.trim(),dept:session.dept,ownerId:session.id,status:'todo',priority:$('#team-task-priority',modal).value,createdAt:now,stageAt:now,dueDate:due,recurring:null,attachments:[]};
+    S().tasks.push(task);try{await Store.save();logActivity(`${session.name} created "${title}" and assigned it to themselves`,'brief');close();render();buildNav();toast('✅ Task created and assigned to you');}catch(error){await Store.load();render();toast(error.message);}
+  };
 }
 
 /* ============================================================
@@ -674,19 +842,21 @@ function sendMessageRaw(clientId, taskId, text, voice){
 function openTask(id){
   const t = S().tasks.find(x=>x.id===id); if(!t) return;
   const c=clientById(t.clientId);
-  const isStaff = session.role!=='client';
+  const canManage = session.role==='admin' || (session.role==='team' && t.ownerId===session.id);
   const msgs = S().messages.filter(m=>m.taskId===t.id).sort((a,b)=>a.at-b.at);
-  const teamOpts = S().users.filter(u=>u.role==='team').map(u=>`<option value="${u.id}" ${u.id===t.ownerId?'selected':''}>${esc(u.name)} · ${u.dept}</option>`).join('');
+  const teamOpts = `<option value="">Unassigned</option>`+S().users.filter(u=>u.role==='team').map(u=>`<option value="${u.id}" ${u.id===t.ownerId?'selected':''}>${esc(u.name)} · ${u.dept}</option>`).join('');
   const lvl=andonLevel(t);
-  const staffControls = isStaff ? `
+  const staffControls = canManage ? `
+    <div class="field"><label>Task title</label><input id="m-title" value="${esc(t.title)}"></div>
+    <div class="field"><label>Description</label><textarea id="m-desc">${esc(t.desc||'')}</textarea></div>
     <div class="form-row" style="margin-top:8px">
       <div class="field"><label>Status / stage</label>
         <select id="m-status">${COLS.map(col=>`<option value="${col.id}" ${t.status===col.id?'selected':''}>${col.label}</option>`).concat(`<option value="blocked" ${t.status==='blocked'?'selected':''}>⛔ Blocked</option>`).join('')}</select></div>
-      <div class="field"><label>Owner (accountable)</label><select id="m-owner">${teamOpts}</select></div>
+      <div class="field"><label>Owner (accountable)</label>${session.role==='admin'?`<select id="m-owner">${teamOpts}</select>`:`<div class="assignment-note compact">${avatar(session)}<div><b>${esc(session.name)}</b><span>Assigned to you</span></div></div>`}</div>
     </div>
     <div class="form-row">
       <div class="field"><label>Priority</label><select id="m-prio">${['low','med','high'].map(p=>`<option ${t.priority===p?'selected':''}>${p}</option>`).join('')}</select></div>
-      <div class="field"><label>Department</label><select id="m-dept">${DEPARTMENTS.map(d=>`<option ${t.dept===d?'selected':''}>${d}</option>`).join('')}</select></div>
+      <div class="field"><label>${session.role==='admin'?'Department':'Due date'}</label>${session.role==='admin'?`<select id="m-dept">${DEPARTMENTS.map(d=>`<option ${t.dept===d?'selected':''}>${d}</option>`).join('')}</select>`:`<input id="m-due" type="date" value="${t.dueDate?new Date(t.dueDate).toISOString().slice(0,10):''}">`}</div>
     </div>` : '';
   const modal = document.createElement('div');
   modal.className='modal-scrim';
@@ -702,7 +872,7 @@ function openTask(id){
         <span class="chip" style="cursor:default">⏱ ${ACTIVE.includes(t.status)?fmtElapsed(t)+' in stage':'—'}</span>
         ${t.recurring?`<span class="chip" style="cursor:default">🔁 ${t.recurring}</span>`:''}
       </div>
-      <p style="margin-bottom:6px">${esc(t.desc)||'<span class="muted">No description</span>'}</p>
+      ${canManage?'':`<p style="margin-bottom:6px">${esc(t.desc)||'<span class="muted">No description</span>'}</p>`}
       ${renderTaskAttachments(t.attachments)}
       ${staffControls}
       <div class="divider"></div>
@@ -710,21 +880,31 @@ function openTask(id){
       ${renderChat(msgs)}
       ${composerHTML(t.clientId, t.id)}
     </div>
-    ${isStaff?`<div class="modal-foot"><button class="btn-ghost" data-close>Close</button><button class="btn" data-save-task="${t.id}">Save changes</button></div>`:'<div class="modal-foot"><button class="btn" data-close>Close</button></div>'}
+    ${canManage?`<div class="modal-foot"><button class="btn-ghost btn-delete-task" data-delete-task="${t.id}">Delete task</button><button class="btn-ghost" data-close>Close</button><button class="btn" data-save-task="${t.id}">Save changes</button></div>`:'<div class="modal-foot"><button class="btn" data-close>Close</button></div>'}
   </div>`;
   $('#modal-host').appendChild(modal);
   modal.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>modal.remove());
   modal.onclick=e=>{ if(e.target===modal) modal.remove(); };
   bindComposer(modal);
   const saveBtn = modal.querySelector('[data-save-task]');
-  if (saveBtn) saveBtn.onclick=()=>{
+  if (saveBtn) saveBtn.onclick=async()=>{
     const ns=$('#m-status').value;
     if (ns!==t.status){ t.stageAt=Date.now(); logActivity(`${session.name} moved "${t.title}" to ${ns.replace('_',' ')}`,'move');
       if (ns==='done'){ Notify.both({phone:c.phone,email:c.email,waText:`🎉 Good news ${c.name}! "${t.title}" is completed. Please review.`,emailText:`Subject: Completed — ${t.title}`}); }
     }
-    t.status=ns; t.ownerId=$('#m-owner').value; t.priority=$('#m-prio').value; t.dept=$('#m-dept').value;
-    Store.save(); modal.remove(); render(); buildNav(); toast('✅ Task updated');
+    t.title=$('#m-title').value.trim();if(!t.title){toast('Task title is required');return;}t.desc=$('#m-desc').value.trim();t.status=ns;t.priority=$('#m-prio').value;
+    if(session.role==='admin'){t.ownerId=$('#m-owner').value||null;t.dept=$('#m-dept').value;}else{t.ownerId=session.id;t.dept=session.dept;t.dueDate=$('#m-due').value?new Date($('#m-due').value).getTime():null;}
+    try{await Store.save();modal.remove();render();buildNav();toast('✅ Task updated');}catch(error){await Store.load();render();toast(error.message);}
   };
+  const deleteBtn=modal.querySelector('[data-delete-task]');if(deleteBtn)deleteBtn.onclick=()=>deleteTask(t.id,modal);
+}
+
+async function deleteTask(taskId,modal=null){
+  const task=S().tasks.find(t=>t.id===taskId);if(!task)return;
+  if(session.role!=='admin' && !(session.role==='team'&&task.ownerId===session.id))return;
+  if(!confirm(`Delete "${task.title}"? This cannot be undone.`))return;
+  S().tasks=S().tasks.filter(t=>t.id!==taskId);S().messages.forEach(m=>{if(m.taskId===taskId)m.taskId=null;});
+  try{await Store.save();modal?.remove();render();buildNav();toast('🗑️ Task deleted');}catch(error){await Store.load();render();toast(error.message);}
 }
 
 /* ============================================================
@@ -732,13 +912,14 @@ function openTask(id){
 ============================================================ */
 function openNewRecurring(){
   const clientOpts=S().clients.map(c=>`<option value="${c.id}">${esc(c.company)}</option>`).join('');
+  const memberOpts=S().users.filter(u=>u.role==='team').map(u=>`<option value="${u.id}">${esc(u.name)} · ${esc(u.dept)}</option>`).join('');
   const modal=document.createElement('div'); modal.className='modal-scrim';
   modal.innerHTML=`<div class="modal"><div class="modal-head"><h2>New repeating task</h2><button class="btn-ghost" data-close>✕</button></div>
     <div class="modal-body">
       <div class="field"><label>Title</label><input id="rc-title" placeholder="e.g. Weekly Instagram carousel"></div>
       <div class="field"><label>Client</label><select id="rc-client">${clientOpts}</select></div>
       <div class="form-row">
-        <div class="field"><label>Department</label><select id="rc-dept">${DEPARTMENTS.map(d=>`<option>${d}</option>`).join('')}</select></div>
+        <div class="field"><label>Assign to</label><select id="rc-owner"><option value="">Select team member</option>${memberOpts}</select></div>
         <div class="field"><label>Repeats</label><select id="rc-freq"><option>daily</option><option selected>weekly</option><option>monthly</option></select></div>
       </div>
     </div>
@@ -748,8 +929,8 @@ function openNewRecurring(){
   modal.onclick=e=>{if(e.target===modal)modal.remove();};
   $('#rc-save').onclick=()=>{
     const title=$('#rc-title').value.trim(); if(!title){toast('Add a title');return;}
-    const dept=$('#rc-dept').value;
-    S().tasks.push({id:Math.random().toString(36).slice(2,9),clientId:$('#rc-client').value,title,desc:'Auto-generated repeating task',dept,ownerId:pickOwner(dept),status:'todo',priority:'med',createdAt:Date.now(),stageAt:Date.now(),dueDate:Date.now()+604800000,recurring:$('#rc-freq').value});
+    const owner=userById($('#rc-owner').value); if(!owner){toast('Select a team member');return;}
+    S().tasks.push({id:Math.random().toString(36).slice(2,9),projectId:null,clientId:$('#rc-client').value,title,desc:'Repeating task',dept:owner.dept,ownerId:owner.id,status:'todo',priority:'med',createdAt:Date.now(),stageAt:Date.now(),dueDate:Date.now()+604800000,recurring:$('#rc-freq').value});
     Store.save(); modal.remove(); render(); toast('🔁 Repeating task created');
   };
 }
@@ -762,6 +943,19 @@ function bindView(){
   $$('[data-client]').forEach(e=>e.onclick=()=>go('client-folder', e.dataset.client));
   $$('[data-task]').forEach(e=>e.onclick=(ev)=>{ if(ev.target.closest('.composer'))return; openTask(e.dataset.task); });
   const sr=$('#submit-req'); if(sr) sr.onclick=submitRequest;
+  const ac=$('[data-add-client]');if(ac)ac.onclick=()=>openClientForm();
+  $$('[data-client-menu]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();const popup=$(`[data-client-menu-popup="${btn.dataset.clientMenu}"]`);$$('.project-menu').forEach(menu=>{if(menu!==popup)menu.classList.add('hidden');});popup.classList.toggle('hidden');btn.setAttribute('aria-expanded',String(!popup.classList.contains('hidden')));});
+  $$('[data-edit-client]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();openClientForm(btn.dataset.editClient);});
+  $$('[data-delete-client]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();deleteClient(btn.dataset.deleteClient);});
+  const att=$('[data-add-team-task]');if(att)att.onclick=openTeamTaskForm;
+  const ap=$('[data-add-project]'); if(ap) ap.onclick=()=>openProjectForm();
+  $$('[data-project-menu]').forEach(btn=>btn.onclick=e=>{
+    e.stopPropagation(); const popup=$(`[data-project-menu-popup="${btn.dataset.projectMenu}"]`);
+    $$('.project-menu').forEach(menu=>{if(menu!==popup)menu.classList.add('hidden');});
+    popup.classList.toggle('hidden'); btn.setAttribute('aria-expanded',String(!popup.classList.contains('hidden')));
+  });
+  $$('[data-edit-project]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();openProjectForm(btn.dataset.editProject);});
+  $$('[data-delete-project]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();deleteProject(btn.dataset.deleteProject);});
   const nr=$('[data-new-recurring]'); if(nr) nr.onclick=openNewRecurring;
   const am=$('[data-add-member]'); if(am) am.onclick=()=>openTeamMember();
   $$('[data-edit-member]').forEach(b=>b.onclick=()=>openTeamMember(b.dataset.editMember));
@@ -778,6 +972,12 @@ function bindView(){
   // composers in view
   bindComposer($('#view'));
 }
+
+document.addEventListener('click', e=>{
+  if(e.target.closest('.project-actions'))return;
+  $$('.project-menu').forEach(menu=>menu.classList.add('hidden'));
+  $$('[data-project-menu]').forEach(btn=>btn.setAttribute('aria-expanded','false'));
+});
 function addRequestFiles(files){
   let total=pendingAttachments.reduce((sum,a)=>sum+a.size,0);
   [...files].forEach(file=>{

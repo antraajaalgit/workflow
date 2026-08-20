@@ -61,18 +61,18 @@ function seed() {
   ];
 
   const activity = [
-    { id:uid(), at:T-mins(20), text:'New brief received from Volt Fitness → auto-delegated to Marketing', type:'brief' },
+    { id:uid(), at:T-mins(20), text:'New brief received from Volt Fitness → awaiting admin assignment', type:'brief' },
     { id:uid(), at:T-mins(47), text:'Arjun moved "Landing page bug" to In Progress', type:'move' },
     { id:uid(), at:T-mins(88), text:'Karan Shah (Volt Fitness) sent a message', type:'msg' },
   ];
 
   const notifications = [
-    { id:uid(), channel:'whatsapp', to:'+91 98xxx xxx02', text:'✅ Your request "Landing page bug" was received and assigned to our Development team.', at:T-mins(88) },
+    { id:uid(), channel:'whatsapp', to:'+91 98xxx xxx02', text:'✅ Your request "Landing page bug" was received. An admin will assign it shortly.', at:T-mins(88) },
     { id:uid(), channel:'email', to:'karan@voltfit.in', text:'Subject: We got your request — Landing page bug', at:T-mins(88) },
   ];
 
   return {
-    users, clients, tasks, messages, activity, notifications,
+    users, clients, projects: [], tasks, messages, activity, notifications,
     rules: DEFAULT_RULES,
     settings: { amberMin: 15, redMin: 25 },
   };

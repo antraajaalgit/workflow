@@ -28,6 +28,10 @@ class DatabaseSeeder extends Seeder
         foreach ($users as &$u) { $u['email']=null; $u['phone']=null; } unset($u);
         foreach ($clients as $c) $users[]=['id'=>$c['id'],'name'=>$c['name'],'role'=>'client','department'=>null,'client_id'=>$c['id'],'company'=>$c['company'],'email'=>$c['email'],'phone'=>$c['phone'],'color'=>$c['color']];
         DB::table('users')->insert(array_map(fn($x)=>$x+['created_at'=>$now,'updated_at'=>$now],$users));
+        DB::table('projects')->insert([
+            ['id'=>'p_lumen_winter','client_id'=>'c_lumen','name'=>'Winter Campaign','description'=>'Seasonal creative and content rollout.','status'=>'active','due_date_ms'=>$ahead(5760),'created_at'=>$now,'updated_at'=>$now],
+            ['id'=>'p_volt_growth','client_id'=>'c_volt','name'=>'Growth & Conversion','description'=>'Website conversion fixes and paid acquisition.','status'=>'active','due_date_ms'=>$ahead(4320),'created_at'=>$now,'updated_at'=>$now],
+        ]);
         $tasks = [
             ['id'=>'t_poster','client_id'=>'c_lumen','title'=>'New menu poster for winter specials','description'=>'Need an A3 poster, warm tones, 6 dishes highlighted.','department'=>'Design','owner_id'=>'u_riya','status'=>'in_progress','priority'=>'high','created_at_ms'=>$ago(180),'stage_at_ms'=>$ago(31),'due_date_ms'=>$ahead(1440),'recurring'=>null],
             ['id'=>'t_carousel','client_id'=>'c_lumen','title'=>'Weekly Instagram carousel','description'=>'3 slides on new coffee blend.','department'=>'Content','owner_id'=>'u_sara','status'=>'review','priority'=>'med','created_at_ms'=>$ago(300),'stage_at_ms'=>$ago(12),'due_date_ms'=>$ahead(600),'recurring'=>'weekly'],
@@ -38,6 +42,12 @@ class DatabaseSeeder extends Seeder
             ['id'=>'t_blog','client_id'=>'c_lumen','title'=>'Blog: "5 winter drinks" article','description'=>'800 words, SEO friendly.','department'=>'Content','owner_id'=>'u_sara','status'=>'done','priority'=>'low','created_at_ms'=>$ago(600),'stage_at_ms'=>$ago(200),'due_date_ms'=>$ago(60),'recurring'=>null],
             ['id'=>'t_report','client_id'=>'c_volt','title'=>'Monthly performance report','description'=>'Auto-generated every 1st.','department'=>'Marketing','owner_id'=>'u_dev','status'=>'new','priority'=>'med','created_at_ms'=>$ago(20),'stage_at_ms'=>$ago(20),'due_date_ms'=>$ahead(1440),'recurring'=>'monthly'],
         ];
+        foreach ($tasks as &$task) {
+            $task['project_id'] = in_array($task['id'], ['t_poster','t_carousel','t_blog'], true)
+                ? 'p_lumen_winter'
+                : (in_array($task['id'], ['t_bug','t_ads','t_report'], true) ? 'p_volt_growth' : null);
+        }
+        unset($task);
         DB::table('tasks')->insert(array_map(fn($x)=>$x+['created_at'=>$now,'updated_at'=>$now],$tasks));
         $messages = [
             ['id'=>(string)Str::uuid(),'client_id'=>'c_lumen','task_id'=>'t_poster','from_id'=>'c_lumen','from_role'=>'client','text'=>'Hi team! Can we make the poster feel cozy and warm? Winter vibes 🙂','voice'=>null,'sent_at_ms'=>$ago(170)],
@@ -48,12 +58,12 @@ class DatabaseSeeder extends Seeder
         ];
         DB::table('messages')->insert(array_map(fn($x)=>$x+['created_at'=>$now,'updated_at'=>$now],$messages));
         DB::table('activities')->insert([
-            ['id'=>(string)Str::uuid(),'occurred_at_ms'=>$ago(20),'text'=>'New brief received from Volt Fitness → auto-delegated to Marketing','type'=>'brief','created_at'=>$now,'updated_at'=>$now],
+            ['id'=>(string)Str::uuid(),'occurred_at_ms'=>$ago(20),'text'=>'New brief received from Volt Fitness → awaiting admin assignment','type'=>'brief','created_at'=>$now,'updated_at'=>$now],
             ['id'=>(string)Str::uuid(),'occurred_at_ms'=>$ago(47),'text'=>'Arjun moved "Landing page bug" to In Progress','type'=>'move','created_at'=>$now,'updated_at'=>$now],
             ['id'=>(string)Str::uuid(),'occurred_at_ms'=>$ago(88),'text'=>'Karan Shah (Volt Fitness) sent a message','type'=>'msg','created_at'=>$now,'updated_at'=>$now],
         ]);
         DB::table('notifications')->insert([
-            ['id'=>(string)Str::uuid(),'channel'=>'whatsapp','recipient'=>'+91 98xxx xxx02','text'=>'✅ Your request "Landing page bug" was received and assigned to our Development team.','sent_at_ms'=>$ago(88),'created_at'=>$now,'updated_at'=>$now],
+            ['id'=>(string)Str::uuid(),'channel'=>'whatsapp','recipient'=>'+91 98xxx xxx02','text'=>'✅ Your request "Landing page bug" was received. An admin will assign it shortly.','sent_at_ms'=>$ago(88),'created_at'=>$now,'updated_at'=>$now],
             ['id'=>(string)Str::uuid(),'channel'=>'email','recipient'=>'karan@voltfit.in','text'=>'Subject: We got your request — Landing page bug','sent_at_ms'=>$ago(88),'created_at'=>$now,'updated_at'=>$now],
         ]);
         $rules = [['logo,brand,poster,banner,design,graphic,ui,ux,mockup,creative','Design'],['website,web,app,bug,code,develop,api,landing page,wordpress,html','Development'],['blog,article,copy,caption,content,write,script,newsletter','Content'],['ad,ads,campaign,promo,social,instagram,facebook,marketing,launch','Marketing'],['seo,keyword,rank,search,backlink,meta,traffic','SEO']];
