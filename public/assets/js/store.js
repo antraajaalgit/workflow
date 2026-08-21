@@ -148,6 +148,13 @@ const Store = {
     if (!response.ok) throw new Error('Unable to disconnect Google Calendar');
     return response.json();
   },
+  async uploadChatAttachments(files) {
+    const body = new FormData(); files.forEach(file=>body.append('files[]',file));
+    const response = await fetch('/api/chat-attachments', {method:'POST',headers:this.headers(),body});
+    const data = await response.json();
+    if(!response.ok)throw new Error(data.message||'Unable to upload attachments');
+    return data.attachments||[];
+  },
   setCsrf(token) {
     const meta = document.querySelector('meta[name="csrf-token"]');
     if (meta && token) meta.content = token;

@@ -532,14 +532,16 @@ function openClientForm(clientId=null){
     </div><div class="modal-foot"><button class="btn-ghost" data-close>Cancel</button><button class="btn" id="save-client">${editing?'Save changes':'Create client'}</button></div></div>`;
   $('#modal-host').appendChild(modal);bindPasswordTools(modal);const close=()=>modal.remove();modal.querySelectorAll('[data-close]').forEach(b=>b.onclick=close);modal.onclick=e=>{if(e.target===modal)close();};
   $('#save-client',modal).onclick=async()=>{
+    const saveButton=$('#save-client',modal);
     const name=$('#client-name',modal).value.trim(),company=$('#client-company',modal).value.trim(),email=$('#client-email',modal).value.trim(),phone=$('#client-phone',modal).value.trim(),color=$('#client-color',modal).value;
     const password=editing?'':$('#client-password',modal).value;if(!name||!company||!email||!phone||(!editing&&!password)){toast('Complete all required client fields');return;}
     if(!editing&&password.length<8){toast('Password must be at least 8 characters');return;}
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){toast('Enter a valid email address');return;}
     const duplicate=S().clients.some(c=>c.id!==clientId&&String(c.email||'').toLowerCase()===email.toLowerCase());if(duplicate){toast('A client with this email already exists');return;}
+    saveButton.disabled=true;saveButton.innerHTML=`<span class="btn-spinner"></span>${editing?'Saving changes…':'Creating client…'}`;
     if(client){Object.assign(client,{name,company,email,phone,color});const login=S().users.find(u=>u.role==='client'&&(u.clientId===client.id||u.id===client.id));if(login)Object.assign(login,{name,company,email,phone,color,clientId:client.id});}
     else{const id='c_'+Math.random().toString(36).slice(2,9);S().clients.push({id,name,company,email,phone,color});S().users.push({id,name,role:'client',roleId:0,dept:null,clientId:id,company,email,phone,color,password});}
-    try{const result=await Store.save();S().users.forEach(u=>delete u.password);logActivity(`Client ${company} ${editing?'updated':'added'}`,'brief');close();render();toast(editing?'✅ Client updated':result.mailFailures?.length?'✅ Client created, but the login email could not be sent':'✅ Client created — login email sent');}catch(error){await Store.load();render();toast(error.message);}
+    try{const result=await Store.save();S().users.forEach(u=>delete u.password);logActivity(`Client ${company} ${editing?'updated':'added'}`,'brief');close();render();toast(editing?'✅ Client updated':result.mailFailures?.length?'✅ Client created, but the login email could not be sent':'✅ Client created — login email sent');}catch(error){await Store.load();render();saveButton.disabled=false;saveButton.textContent=editing?'Save changes':'Create client';toast(error.message);}
   };
 }
 
@@ -757,9 +759,7 @@ function renderChat(msgs){
   return `<div class="chat">${msgs.map(m=>{
     const out = session.role!=='client' ? m.fromRole!=='client' : m.fromRole==='client';
     const u = userById(m.fromId);
-    const body = m.voice
-      ? `<div class="voice-note">🎤 <audio controls src="${m.voice}"></audio></div>`
-      : esc(m.text);
+    const body = `${m.text?`<div>${esc(m.text)}</div>`:''}${m.voice?`<div class="voice-note">🎤 <audio controls src="${m.voice}"></audio></div>`:''}${renderMessageAttachments(m.attachments)}`;
     return `<div class="msg ${out?'out':''}">
       ${avatar(u,'')}
       <div><div class="who">${esc(u?u.name:'?')}</div><div class="bubble">${body}</div><div class="time">${clockTime(m.at)}</div></div>
@@ -767,11 +767,20 @@ function renderChat(msgs){
   }).join('')}</div>`;
 }
 function composerHTML(clientId, taskId){
-  return `<div class="composer" data-client="${clientId}" data-task="${taskId||''}">
+  return `<div class="composer-shell"><div class="chat-attachment-tray hidden" data-chat-tray></div><div class="composer" data-client="${clientId}" data-task="${taskId||''}">
+    <input type="file" class="file-input" data-chat-files multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip">
+    <button class="composer-icon" data-attach title="Attach files" aria-label="Attach files">📎</button>
     <button class="mic-btn" data-mic title="Record voice note">🎤</button>
     <textarea data-msg placeholder="Type a message…" rows="1"></textarea>
     <button class="btn small" data-send>Send</button>
-  </div>`;
+  </div></div>`;
+}
+
+function renderMessageAttachments(attachments=[]){
+  if(!attachments.length)return '';
+  return `<div class="message-attachments">${attachments.map(a=>String(a.type||'').startsWith('image/')
+    ? `<a href="${a.data}" download="${esc(a.name)}" class="message-image" title="Download attachment"><img src="${a.data}" alt="Chat attachment"><span>↓</span></a>`
+    : `<a href="${a.data}" download="${esc(a.name)}" class="message-file-tile" title="Download ${esc(a.name)}"><span>📄</span><small>${String(a.name||'file').split('.').pop().slice(0,5).toUpperCase()}</small><i>↓</i></a>`).join('')}</div>`;
 }
 
 /* ============================================================
@@ -801,22 +810,24 @@ async function toggleRecord(btn, onDone){
 /* ============================================================
    SEND MESSAGE
 ============================================================ */
-function sendMessage(clientId, taskId, text, voice){
-  if (!text && !voice) return;
-  const msg = { id:Math.random().toString(36).slice(2,9), clientId, taskId:taskId||null, fromId:session.id, fromRole:session.role==='client'?'client':'team', text:text||'', voice:voice||null, at:Date.now() };
-  S().messages.push(msg); Store.save();
+async function sendMessage(clientId, taskId, text, voice, attachments=[]){
+  if (!text && !voice && !attachments.length) return;
+  const msg = { id:Math.random().toString(36).slice(2,9), clientId, taskId:taskId||null, fromId:session.id, fromRole:session.role==='client'?'client':'team', text:text||'', voice:voice||null, attachments, at:Date.now() };
+  S().messages.push(msg);
+  try{await Store.save();}catch(error){S().messages=S().messages.filter(m=>m.id!==msg.id);throw error;}
   const c = clientById(clientId);
   if (session.role==='client'){
-    logActivity(`${c.name} (${c.company}) sent a ${voice?'voice note':'message'}`,'msg');
+    logActivity(`${c.name} (${c.company}) sent a ${voice?'voice note':attachments.length?'file attachment':'message'}`,'msg');
     Notify.both({ phone:'+91 agency-team', email:'team@antrajaal.com',
-      waText:`💬 New message from ${c.name} (${c.company}): "${voice?'🎤 voice note':text}"`,
+      waText:`💬 New message from ${c.name} (${c.company}): "${voice?'🎤 voice note':attachments.length?'📎 attachment':text}"`,
       emailText:`Subject: New message from ${c.company}` });
   } else {
     Notify.both({ phone:c.phone, email:c.email,
-      waText:`💬 ${session.name} from Antrajaal replied: "${voice?'🎤 voice note':text}"`,
+      waText:`💬 ${session.name} from Antrajaal replied: "${voice?'🎤 voice note':attachments.length?'📎 attachment':text}"`,
       emailText:`Subject: Reply from your Antrajaal team` });
   }
   render();
+  return true;
 }
 
 /* ============================================================
@@ -852,7 +863,7 @@ function submitRequest(){
   go('my-requests');
 }
 function sendMessageRaw(clientId, taskId, text, voice){
-  S().messages.push({ id:Math.random().toString(36).slice(2,9), clientId, taskId, fromId:session.id, fromRole:'client', text, voice, at:Date.now() });
+  S().messages.push({ id:Math.random().toString(36).slice(2,9), clientId, taskId, fromId:session.id, fromRole:'client', text, voice, attachments:[], at:Date.now() });
 }
 
 /* ============================================================
@@ -1059,10 +1070,15 @@ function bindComposer(root){
     const ta=comp.querySelector('[data-msg]');
     const send=comp.querySelector('[data-send]');
     const mic=comp.querySelector('[data-mic]');
-    const doSend=()=>{ const v=ta.value.trim(); if(!v)return; sendMessage(cid,tid,v,null); };
+    const picker=comp.querySelector('[data-chat-files]'),attach=comp.querySelector('[data-attach]'),tray=comp.closest('.composer-shell').querySelector('[data-chat-tray]');
+    comp._files=[];
+    const renderTray=()=>{tray.classList.toggle('hidden',!comp._files.length);tray.innerHTML=comp._files.map(a=>`<div class="chat-file-chip"><span>${String(a.file.type||'').startsWith('image/')?'🖼️':'📄'}</span><div><b>${esc(a.file.name)}</b><small>${formatFileSize(a.file.size)}</small></div><button type="button" data-remove-chat-file="${a.id}" aria-label="Remove ${esc(a.file.name)}">✕</button></div>`).join('');$$('[data-remove-chat-file]',tray).forEach(b=>b.onclick=()=>{comp._files=comp._files.filter(a=>a.id!==b.dataset.removeChatFile);renderTray();});};
+    const doSend=async()=>{const v=ta.value.trim();const files=comp._files.map(item=>item.file);if(!v&&!files.length)return;send.disabled=true;send.textContent=files.length?'Uploading…':'Sending…';try{const attachments=files.length?await Store.uploadChatAttachments(files):[];send.textContent='Sending…';await sendMessage(cid,tid,v,null,attachments);comp._files=[];ta.value='';renderTray();}catch(error){toast(error.message);send.disabled=false;send.textContent='Send';}};
     if(send) send.onclick=doSend;
     if(ta) ta.onkeydown=e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); doSend(); } };
-    if(mic) mic.onclick=()=>toggleRecord(mic,(data)=>sendMessage(cid,tid,'',data));
+    if(mic) mic.onclick=()=>toggleRecord(mic,async(data)=>{try{await sendMessage(cid,tid,'',data);}catch(_){}});
+    if(attach)attach.onclick=()=>picker.click();
+    if(picker)picker.onchange=()=>{let total=comp._files.reduce((sum,a)=>sum+a.file.size,0);[...picker.files].forEach(file=>{if(total+file.size>10*1024*1024){toast('Chat attachments can be up to 10 MB in total');return;}total+=file.size;comp._files.push({id:Math.random().toString(36).slice(2,9),file});});picker.value='';renderTray();};
   });
 }
 

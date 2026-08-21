@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class StateController extends Controller
 {
@@ -79,7 +81,7 @@ class StateController extends Controller
             'clients' => DB::table('clients')->get()->map(fn($r)=>['id'=>$r->id,'name'=>$r->name,'company'=>$r->company,'email'=>$r->email,'phone'=>$r->phone,'color'=>$r->color])->all(),
             'projects' => Schema::hasTable('projects') ? DB::table('projects')->get()->map(fn($r)=>['id'=>$r->id,'clientId'=>$r->client_id,'name'=>$r->name,'desc'=>$r->description,'status'=>$r->status,'dueDate'=>$r->due_date_ms ? (int)$r->due_date_ms : null])->all() : [],
             'tasks' => DB::table('tasks')->get()->map(fn($r)=>['id'=>$r->id,'clientId'=>$r->client_id,'projectId'=>$r->project_id ?? null,'title'=>$r->title,'desc'=>$r->description,'dept'=>$r->department,'ownerId'=>$r->owner_id,'status'=>$r->status,'priority'=>$r->priority,'createdAt'=>(int)$r->created_at_ms,'stageAt'=>(int)$r->stage_at_ms,'dueDate'=>$r->due_date_ms ? (int)$r->due_date_ms : null,'recurring'=>$r->recurring,'attachments'=>json_decode($r->attachments ?? '[]', true) ?: []])->all(),
-            'messages' => DB::table('messages')->get()->map(fn($r)=>['id'=>$r->id,'clientId'=>$r->client_id,'taskId'=>$r->task_id,'fromId'=>$r->from_id,'fromRole'=>$r->from_role,'text'=>$r->text ?? '', 'voice'=>$r->voice,'at'=>(int)$r->sent_at_ms])->all(),
+            'messages' => DB::table('messages')->get()->map(fn($r)=>['id'=>$r->id,'clientId'=>$r->client_id,'taskId'=>$r->task_id,'fromId'=>$r->from_id,'fromRole'=>$r->from_role,'text'=>$r->text ?? '', 'voice'=>$r->voice,'attachments'=>json_decode($r->attachments ?? '[]', true) ?: [],'at'=>(int)$r->sent_at_ms])->all(),
             'activity' => DB::table('activities')->orderByDesc('occurred_at_ms')->get()->map(fn($r)=>['id'=>$r->id,'at'=>(int)$r->occurred_at_ms,'text'=>$r->text,'type'=>$r->type])->all(),
             'notifications' => DB::table('notifications')->orderByDesc('sent_at_ms')->get()->map(fn($r)=>['id'=>$r->id,'channel'=>$r->channel,'to'=>$r->recipient,'text'=>$r->text,'at'=>(int)$r->sent_at_ms])->all(),
             'rules' => DB::table('delegation_rules')->orderBy('sort_order')->get()->map(fn($r)=>['kw'=>$r->keywords,'dept'=>$r->department])->all(),
@@ -105,7 +107,7 @@ class StateController extends Controller
             if ($hasAttachments) $task['attachments'] = json_encode($x['attachments'] ?? []);
             return $task;
         }, $s['tasks']));
-        DB::table('messages')->insert(array_map(fn($x)=>['id'=>$x['id'],'client_id'=>$x['clientId'],'task_id'=>$x['taskId']??null,'from_id'=>$x['fromId'],'from_role'=>$x['fromRole'],'text'=>$x['text']??null,'voice'=>$x['voice']??null,'sent_at_ms'=>$x['at'],'created_at'=>$now,'updated_at'=>$now],$s['messages']));
+        DB::table('messages')->insert(array_map(fn($x)=>['id'=>$x['id'],'client_id'=>$x['clientId'],'task_id'=>$x['taskId']??null,'from_id'=>$x['fromId'],'from_role'=>$x['fromRole'],'text'=>$x['text']??null,'voice'=>$x['voice']??null,'attachments'=>json_encode($x['attachments']??[]),'sent_at_ms'=>$x['at'],'created_at'=>$now,'updated_at'=>$now],$s['messages']));
         DB::table('activities')->insert(array_map(fn($x)=>['id'=>$x['id'],'occurred_at_ms'=>$x['at'],'text'=>$x['text'],'type'=>$x['type'],'created_at'=>$now,'updated_at'=>$now],$s['activity']));
         DB::table('notifications')->insert(array_map(fn($x)=>['id'=>$x['id'],'channel'=>$x['channel'],'recipient'=>$x['to'],'text'=>$x['text'],'sent_at_ms'=>$x['at'],'created_at'=>$now,'updated_at'=>$now],$s['notifications']));
         DB::table('delegation_rules')->insert(array_map(fn($x,$i)=>['sort_order'=>$i,'keywords'=>$x['kw'],'department'=>$x['dept'],'created_at'=>$now,'updated_at'=>$now],$s['rules'],array_keys($s['rules'])));
@@ -122,6 +124,19 @@ class StateController extends Controller
         DB::statement('SET FOREIGN_KEY_CHECKS=0');
         foreach (['settings','delegation_rules','notifications','activities','messages','tasks','projects','users','clients'] as $table) if (Schema::hasTable($table)) DB::table($table)->delete();
         DB::statement('SET FOREIGN_KEY_CHECKS=1');
+    }
+
+    public function uploadChatAttachments(Request $request): JsonResponse
+    {
+        $this->requireUser($request);
+        $request->validate(['files' => ['required','array','max:10'], 'files.*' => ['file','mimes:jpg,jpeg,png,gif,webp,pdf,doc,docx,xls,xlsx,csv,txt,zip','max:10240']]);
+        abort_if(collect($request->file('files'))->sum(fn($file) => $file->getSize()) > 10 * 1024 * 1024, 422, 'Attachments can be up to 10 MB in total.');
+        $attachments = collect($request->file('files'))->map(function ($file) {
+            $extension = preg_replace('/[^a-z0-9]/i', '', $file->getClientOriginalExtension()) ?: 'bin';
+            $path = $file->storeAs('chat-attachments', Str::uuid().'.'.$extension, 'public');
+            return ['id'=>(string)Str::uuid(),'name'=>$file->getClientOriginalName(),'type'=>$file->getMimeType() ?: 'application/octet-stream','size'=>$file->getSize(),'data'=>Storage::url($path)];
+        })->values();
+        return response()->json(['attachments' => $attachments]);
     }
 
     private function requireUser(Request $request): object

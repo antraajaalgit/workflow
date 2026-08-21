@@ -11,6 +11,7 @@ Route::prefix('api')->group(function () {
     Route::get('/state', [StateController::class, 'show']);
     Route::put('/state', [StateController::class, 'update']);
     Route::post('/state/reset', [StateController::class, 'reset']);
+    Route::post('/chat-attachments', [StateController::class, 'uploadChatAttachments']);
     Route::prefix('google-calendar')->group(function () {
         Route::get('/connect', [GoogleCalendarController::class, 'connect']);
         Route::get('/callback', [GoogleCalendarController::class, 'callback']);
