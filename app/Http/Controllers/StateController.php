@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Http\JsonResponse;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -134,9 +135,21 @@ class StateController extends Controller
         $attachments = collect($request->file('files'))->map(function ($file) {
             $extension = preg_replace('/[^a-z0-9]/i', '', $file->getClientOriginalExtension()) ?: 'bin';
             $path = $file->storeAs('chat-attachments', Str::uuid().'.'.$extension, 'public');
-            return ['id'=>(string)Str::uuid(),'name'=>$file->getClientOriginalName(),'type'=>$file->getMimeType() ?: 'application/octet-stream','size'=>$file->getSize(),'data'=>Storage::url($path)];
+            return ['id'=>(string)Str::uuid(),'name'=>$file->getClientOriginalName(),'type'=>$file->getMimeType() ?: 'application/octet-stream','size'=>$file->getSize(),'data'=>'/api/chat-attachments/'.basename($path)];
         })->values();
         return response()->json(['attachments' => $attachments]);
+    }
+
+    public function showChatAttachment(Request $request, string $file): BinaryFileResponse
+    {
+        $this->requireUser($request);
+        abort_unless($file === basename($file) && preg_match('/^[a-f0-9-]+\.[a-z0-9]+$/i', $file), 404);
+        $path = 'chat-attachments/'.$file;
+        abort_unless(Storage::disk('public')->exists($path), 404);
+        return response()->file(Storage::disk('public')->path($path), [
+            'Cache-Control' => 'private, max-age=86400',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     private function requireUser(Request $request): object
