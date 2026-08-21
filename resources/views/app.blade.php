@@ -13,9 +13,13 @@
     <div>
       <div class="login-card">
         <div class="brand"><div class="brand-mark">流</div><div><h1>Nagare</h1><p class="tag">Agency Flow OS · by Antrajaal</p></div></div>
-        <p class="login-sub">Choose how you want to sign in. (Demo accounts — no password needed.)</p>
-        <div class="login-tabs"><button class="ltab active" data-side="team">Agency / Team</button><button class="ltab" data-side="client">Client</button></div>
-        <div id="login-list" class="login-list"></div>
+        <p class="login-sub">Sign in with the email and password provided for your account.</p>
+        <form id="login-form" class="login-form">
+          <div class="field"><label for="login-email">Email address</label><input id="login-email" type="email" autocomplete="email" required placeholder="you@company.com" /></div>
+          <div class="field"><label for="login-password">Password</label><div class="password-input"><input id="login-password" type="password" autocomplete="current-password" required placeholder="Enter your password" /><button type="button" id="login-password-toggle" class="password-toggle" aria-label="Show password">Show</button></div></div>
+          <p id="login-error" class="login-error hidden" role="alert"></p>
+          <button id="login-submit" class="btn login-submit" type="submit">Sign in</button>
+        </form>
       </div>
       <p class="login-foot">Laravel + MySQL build · data is stored on the server</p>
     </div>
@@ -33,7 +37,7 @@
   <div id="notif-drawer" class="drawer hidden"><div class="drawer-head"><strong>Outbound messages</strong><span class="muted small">WhatsApp + Email (simulated)</span><button id="notif-close" class="btn-ghost small">Close</button></div><div id="notif-list" class="notif-list"></div></div>
   <div id="scrim" class="scrim hidden"></div>
   <div id="modal-host"></div>
-  <script src="{{ asset('assets/js/store.js') }}?v=6"></script>
-  <script src="{{ asset('assets/js/app.js') }}?v=10"></script>
+  <script src="{{ asset('assets/js/store.js') }}?v=8"></script>
+  <script src="{{ asset('assets/js/app.js') }}?v=12"></script>
 </body>
 </html>

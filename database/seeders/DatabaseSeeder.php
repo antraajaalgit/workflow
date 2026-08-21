@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 class DatabaseSeeder extends Seeder
@@ -18,15 +19,17 @@ class DatabaseSeeder extends Seeder
         ];
         DB::table('clients')->insert(array_map(fn($x)=>$x+['created_at'=>$now,'updated_at'=>$now],$clients));
         $users = [
-            ['id'=>'u_admin','name'=>'You (Owner)','role'=>'admin','department'=>null,'client_id'=>null,'company'=>null,'color'=>'#7a5c3e'],
+            ['id'=>'u_admin_sales','name'=>'Sales Admin','role'=>'admin','role_id'=>1,'department'=>null,'client_id'=>null,'company'=>'Antrajaal','email'=>'sales@antraajaal.com','password'=>Hash::make('Jagmeet29'),'color'=>'#7a5c3e'],
+            ['id'=>'u_admin_ceo','name'=>'CEO Admin','role'=>'admin','role_id'=>1,'department'=>null,'client_id'=>null,'company'=>'Antrajaal','email'=>'ceo@antraajaal.com','password'=>Hash::make('Agam123'),'color'=>'#c9a25f'],
+            ['id'=>'u_admin_agam','name'=>'Agam Bahri','role'=>'admin','role_id'=>1,'department'=>null,'client_id'=>null,'company'=>'Antrajaal','email'=>'agambahri@antraajaal.com','password'=>Hash::make('Pluto0403'),'color'=>'#3a6ea5'],
             ['id'=>'u_riya','name'=>'Riya Kapoor','role'=>'team','department'=>'Design','client_id'=>null,'company'=>null,'color'=>'#c9a25f'],
             ['id'=>'u_arjun','name'=>'Arjun Mehta','role'=>'team','department'=>'Development','client_id'=>null,'company'=>null,'color'=>'#3a6ea5'],
             ['id'=>'u_sara','name'=>'Sara Khan','role'=>'team','department'=>'Content','client_id'=>null,'company'=>null,'color'=>'#3fa34d'],
             ['id'=>'u_dev','name'=>'Dev Sharma','role'=>'team','department'=>'Marketing','client_id'=>null,'company'=>null,'color'=>'#d94a3d'],
             ['id'=>'u_neha','name'=>'Neha Rao','role'=>'team','department'=>'SEO','client_id'=>null,'company'=>null,'color'=>'#8a6d3b'],
         ];
-        foreach ($users as &$u) { $u['email']=null; $u['phone']=null; } unset($u);
-        foreach ($clients as $c) $users[]=['id'=>$c['id'],'name'=>$c['name'],'role'=>'client','department'=>null,'client_id'=>$c['id'],'company'=>$c['company'],'email'=>$c['email'],'phone'=>$c['phone'],'color'=>$c['color']];
+        foreach ($users as &$u) { $u['role_id'] ??= 2; $u['email'] ??= $u['id'].'@example.test'; $u['password'] ??= Hash::make(Str::random(32)); $u['phone']=null; } unset($u);
+        foreach ($clients as $c) $users[]=['id'=>$c['id'],'name'=>$c['name'],'role'=>'client','role_id'=>0,'department'=>null,'client_id'=>$c['id'],'company'=>$c['company'],'email'=>$c['email'],'password'=>Hash::make(Str::random(32)),'phone'=>$c['phone'],'color'=>$c['color']];
         DB::table('users')->insert(array_map(fn($x)=>$x+['created_at'=>$now,'updated_at'=>$now],$users));
         DB::table('projects')->insert([
             ['id'=>'p_lumen_winter','client_id'=>'c_lumen','name'=>'Winter Campaign','description'=>'Seasonal creative and content rollout.','status'=>'active','due_date_ms'=>$ahead(5760),'created_at'=>$now,'updated_at'=>$now],

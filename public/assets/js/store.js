@@ -101,6 +101,7 @@ const Store = {
       try { message = (await response.json()).message || message; } catch (_) {}
       throw new Error(message);
     }
+    return response.json();
   },
   async reset() {
     const response = await fetch('/api/state/reset', {
@@ -116,12 +117,14 @@ const Store = {
     if (!response.ok) throw new Error('Unable to load session');
     const data = await response.json();
     this.setCsrf(data.csrfToken);
-    return data.userId;
+    return data;
   },
-  async signIn(userId) {
-    const response = await fetch('/api/session', { method: 'PUT', headers: this.headers({ 'Content-Type': 'application/json' }), body: JSON.stringify({ userId }) });
-    if (!response.ok) throw new Error('Unable to sign in');
-    this.setCsrf((await response.json()).csrfToken);
+  async signIn(email, password) {
+    const response = await fetch('/api/session', { method: 'POST', headers: this.headers({ 'Content-Type': 'application/json' }), body: JSON.stringify({ email, password }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Unable to sign in');
+    this.setCsrf(data.csrfToken);
+    return data.user;
   },
   async signOut() {
     const response = await fetch('/api/session', { method: 'DELETE', headers: this.headers() });

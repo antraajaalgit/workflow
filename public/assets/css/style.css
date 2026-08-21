@@ -36,6 +36,16 @@ h1,h2,h3{font-weight:650;letter-spacing:-.01em}
 .ltab.active{background:var(--panel);color:var(--ink);box-shadow:0 2px 8px rgba(0,0,0,.05)}
 .login-list{display:flex;flex-direction:column;gap:8px}
 .login-foot{text-align:center;color:var(--muted);font-size:12px;margin-top:18px}
+.login-form{display:flex;flex-direction:column;gap:15px}
+.login-form .field{margin:0}
+.login-submit{width:100%;padding:12px;margin-top:2px}
+.password-input{position:relative}
+.password-input input{width:100%;padding-right:62px}
+.password-toggle{position:absolute;right:8px;top:50%;transform:translateY(-50%);padding:6px;color:var(--accent);font-size:12px;font-weight:700}
+.login-error{color:var(--red);font-size:13px;background:rgba(217,74,61,.08);border-radius:9px;padding:9px 11px}
+.password-tools{display:flex;align-items:center;gap:9px;margin-top:8px}
+.password-tools .btn-2{padding:7px 10px;border-radius:8px;font-weight:650}
+.field-hint{font-size:11px;color:var(--muted);margin-top:6px}
 .user-pick{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--panel);text-align:left;transition:.15s}
 .user-pick:hover{border-color:var(--accent2);transform:translateY(-1px)}
 .avatar{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font-weight:700;color:#fff;flex:none;font-size:14px}

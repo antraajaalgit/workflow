@@ -14,6 +14,18 @@ const clientById = id => S().clients.find(c => c.id === id);
 const projectById = id => (S().projects || []).find(p => p.id === id);
 const tasksOf = cid => S().tasks.filter(t => t.clientId === cid);
 const initials = n => n.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+function generatePassword(length=14){
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
+  const bytes=new Uint32Array(length);crypto.getRandomValues(bytes);
+  return Array.from(bytes,n=>chars[n%chars.length]).join('');
+}
+function passwordField(id, required=true){
+  return `<div class="field"><label>Password ${required?'<span class="req">*</span>':''}</label><div class="password-input"><input id="${id}" type="text" autocomplete="new-password" ${required?'required':''} minlength="8" placeholder="Minimum 8 characters"><button type="button" class="password-toggle" data-password-toggle="${id}">Hide</button></div><div class="password-tools"><button type="button" class="btn-2 small" data-generate-password="${id}">Generate password</button><span class="field-hint">Generate securely or type one manually.</span></div></div>`;
+}
+function bindPasswordTools(root=document){
+  $$('[data-generate-password]',root).forEach(b=>b.onclick=()=>{const input=$('#'+b.dataset.generatePassword,root);input.value=generatePassword();input.type='text';const toggle=$(`[data-password-toggle="${input.id}"]`,root);if(toggle)toggle.textContent='Hide';});
+  $$('[data-password-toggle]',root).forEach(b=>b.onclick=()=>{const input=$('#'+b.dataset.passwordToggle,root);input.type=input.type==='password'?'text':'password';b.textContent=input.type==='password'?'Show':'Hide';});
+}
 
 function avatar(u, cls='') {
   if (!u) return '';
@@ -95,25 +107,11 @@ function activeLoad(uid){ return S().tasks.filter(t=>t.ownerId===uid && ACTIVE.i
 /* ============================================================
    AUTH
 ============================================================ */
-function renderLogin(){
-  const side = $('.ltab.active').dataset.side;
-  const users = side==='team'
-    ? S().users.filter(u => u.role==='admin' || u.role==='team')
-    : S().users.filter(u => u.role==='client');
-  $('#login-list').innerHTML = users.map(u => {
-    const sub = u.role==='client' ? u.company : (u.role==='admin' ? 'Owner / Admin' : u.dept+' Dept');
-    const pill = u.role==='admin' ? 'Admin' : u.role==='team' ? 'Team' : 'Client';
-    return `<button class="user-pick" data-id="${u.id}">
-      ${avatar(u)}
-      <div class="meta"><b>${esc(u.name)}</b><span>${esc(sub)}</span></div>
-      <span class="pill">${pill}</span>
-    </button>`;
-  }).join('');
-  $$('.user-pick').forEach(b => b.onclick = () => signIn(b.dataset.id));
-}
-async function signIn(id){
-  await Store.signIn(id);
-  session = userById(id);
+async function signIn(email, password){
+  const submit=$('#login-submit'), error=$('#login-error');
+  submit.disabled=true;submit.textContent='Signing in…';error.classList.add('hidden');
+  try { session = await Store.signIn(email, password); await Store.load(); session = userById(session.id);
+  } catch (e) { error.textContent=e.message;error.classList.remove('hidden');submit.disabled=false;submit.textContent='Sign in';return; }
   $('#login').classList.add('hidden');
   $('#app').classList.remove('hidden');
   route = session.role==='client' ? 'my-requests' : 'dashboard';
@@ -124,7 +122,8 @@ async function signOut(){
   session = null;
   $('#app').classList.add('hidden');
   $('#login').classList.remove('hidden');
-  renderLogin();
+  $('#login-form').reset();
+  $('#login-submit').disabled=false;$('#login-submit').textContent='Sign in';$('#login-error').classList.add('hidden');
 }
 function renderWho(){
   $('#whoami').innerHTML = `${avatar(session)}<div><b>${esc(session.name)}</b><span>${session.role==='client'?esc(session.company):(session.dept||'Owner')}</span></div>`;
@@ -486,17 +485,19 @@ function openClientForm(clientId=null){
     <div class="modal-body">
       <div class="form-row"><div class="field"><label>Contact name <span class="req">*</span></label><input id="client-name" value="${esc(client?.name||'')}" placeholder="e.g. Priya Nair"></div><div class="field"><label>Company <span class="req">*</span></label><input id="client-company" value="${esc(client?.company||'')}" placeholder="e.g. Lumen Cafe"></div></div>
       <div class="form-row"><div class="field"><label>Email <span class="req">*</span></label><input id="client-email" type="email" value="${esc(client?.email||'')}" placeholder="client@company.com"></div><div class="field"><label>Phone <span class="req">*</span></label><input id="client-phone" type="tel" value="${esc(client?.phone||'')}" placeholder="+91 98765 43210"></div></div>
+      ${editing?'':passwordField('client-password')}
       <div class="field"><label>Folder color</label><div class="color-field"><input id="client-color" type="color" value="${esc(client?.color||'#7a5c3e')}"><span class="muted small">Used for the client avatar and visual identity.</span></div></div>
     </div><div class="modal-foot"><button class="btn-ghost" data-close>Cancel</button><button class="btn" id="save-client">${editing?'Save changes':'Create client'}</button></div></div>`;
-  $('#modal-host').appendChild(modal);const close=()=>modal.remove();modal.querySelectorAll('[data-close]').forEach(b=>b.onclick=close);modal.onclick=e=>{if(e.target===modal)close();};
+  $('#modal-host').appendChild(modal);bindPasswordTools(modal);const close=()=>modal.remove();modal.querySelectorAll('[data-close]').forEach(b=>b.onclick=close);modal.onclick=e=>{if(e.target===modal)close();};
   $('#save-client',modal).onclick=async()=>{
     const name=$('#client-name',modal).value.trim(),company=$('#client-company',modal).value.trim(),email=$('#client-email',modal).value.trim(),phone=$('#client-phone',modal).value.trim(),color=$('#client-color',modal).value;
-    if(!name||!company||!email||!phone){toast('Complete all required client fields');return;}
+    const password=editing?'':$('#client-password',modal).value;if(!name||!company||!email||!phone||(!editing&&!password)){toast('Complete all required client fields');return;}
+    if(!editing&&password.length<8){toast('Password must be at least 8 characters');return;}
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){toast('Enter a valid email address');return;}
     const duplicate=S().clients.some(c=>c.id!==clientId&&String(c.email||'').toLowerCase()===email.toLowerCase());if(duplicate){toast('A client with this email already exists');return;}
     if(client){Object.assign(client,{name,company,email,phone,color});const login=S().users.find(u=>u.role==='client'&&(u.clientId===client.id||u.id===client.id));if(login)Object.assign(login,{name,company,email,phone,color,clientId:client.id});}
-    else{const id='c_'+Math.random().toString(36).slice(2,9);S().clients.push({id,name,company,email,phone,color});S().users.push({id,name,role:'client',dept:null,clientId:id,company,email,phone,color});}
-    try{await Store.save();logActivity(`Client ${company} ${editing?'updated':'added'}`,'brief');close();render();toast(editing?'✅ Client updated':'✅ Client folder created');}catch(error){await Store.load();render();toast(error.message);}
+    else{const id='c_'+Math.random().toString(36).slice(2,9);S().clients.push({id,name,company,email,phone,color});S().users.push({id,name,role:'client',roleId:0,dept:null,clientId:id,company,email,phone,color,password});}
+    try{const result=await Store.save();S().users.forEach(u=>delete u.password);logActivity(`Client ${company} ${editing?'updated':'added'}`,'brief');close();render();toast(editing?'✅ Client updated':result.mailFailures?.length?'✅ Client created, but the login email could not be sent':'✅ Client created — login email sent');}catch(error){await Store.load();render();toast(error.message);}
   };
 }
 
@@ -575,23 +576,26 @@ function openTeamMember(memberId=null){
         <div class="field"><label>Phone <span class="req">*</span></label><input id="tm-phone" type="tel" value="${esc(member?.phone || '')}" placeholder="+91 98765 43210"></div>
       </div>
       <div class="field"><label>Department <span class="req">*</span></label><select id="tm-dept">${DEPARTMENTS.map(d=>`<option ${member?.dept===d?'selected':''}>${d}</option>`).join('')}</select></div>
+      ${member?'':passwordField('tm-password')}
     </div><div class="modal-foot"><button class="btn-ghost" data-close>Cancel</button><button class="btn" id="tm-save">${member?'Save changes':'Add member'}</button></div></div>`;
   $('#modal-host').appendChild(modal);
+  bindPasswordTools(modal);
   modal.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>modal.remove());
   modal.onclick=e=>{if(e.target===modal)modal.remove();};
   $('#tm-save').onclick=async()=>{
     const name=$('#tm-name').value.trim(), email=$('#tm-email').value.trim(), phone=$('#tm-phone').value.trim(), dept=$('#tm-dept').value;
-    if(!name || !email || !phone){ toast('Name, email and phone are required'); return; }
+    const password=member?'':$('#tm-password',modal).value;if(!name || !email || !phone || (!member&&!password)){ toast('Name, email, phone and password are required'); return; }
+    if(!member&&password.length<8){toast('Password must be at least 8 characters');return;}
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ toast('Enter a valid email address'); return; }
     if(S().users.some(u=>u.id!==memberId && u.email && u.email.toLowerCase()===email.toLowerCase())){ toast('That email is already in use'); return; }
     const previous = member ? {...member} : null;
-    const added = member ? null : {id:'u_'+Math.random().toString(36).slice(2,9),name,email,phone,dept,role:'team',color:DEPT_COLOR[dept]?.fg || '#7a5c3e'};
+    const added = member ? null : {id:'u_'+Math.random().toString(36).slice(2,9),name,email,phone,dept,role:'team',roleId:2,password,color:DEPT_COLOR[dept]?.fg || '#7a5c3e'};
     if(member) Object.assign(member,{name,email,phone,dept});
     else S().users.push(added);
     const saveButton = $('#tm-save');
     saveButton.disabled = true; saveButton.textContent = 'Saving…';
     try {
-      await Store.save(); modal.remove(); render(); toast(member?'✅ Team member updated':'✅ Team member added');
+      const result=await Store.save();S().users.forEach(u=>delete u.password);modal.remove();render();toast(member?'✅ Team member updated':result.mailFailures?.length?'✅ Team member added, but the login email could not be sent':'✅ Team member added — login email sent');
     } catch (error) {
       if(member) Object.assign(member, previous);
       else S().users = S().users.filter(u=>u.id!==added.id);
@@ -1039,7 +1043,8 @@ setInterval(()=>{ if(session && ['andon','dashboard','kanban'].includes(route)) 
 /* ============================================================
    GLOBAL WIRING
 ============================================================ */
-$$('.ltab').forEach(t=>t.onclick=()=>{ $$('.ltab').forEach(x=>x.classList.remove('active')); t.classList.add('active'); renderLogin(); });
+$('#login-form').onsubmit=e=>{e.preventDefault();signIn($('#login-email').value.trim(),$('#login-password').value);};
+$('#login-password-toggle').onclick=()=>{const input=$('#login-password');input.type=input.type==='password'?'text':'password';$('#login-password-toggle').textContent=input.type==='password'?'Show':'Hide';};
 $('#logout').onclick=signOut;
 $('#bell').onclick=()=>toggleDrawer(true);
 $('#notif-close').onclick=()=>toggleDrawer(false);
@@ -1061,12 +1066,10 @@ function renderNotifs(){
 /* ---------- boot ---------- */
 (async function boot(){
   try {
-    await Store.load();
+    const saved=await Store.currentSession();
+    if(saved.userId){await Store.load();session=userById(saved.userId);$('#login').classList.add('hidden');$('#app').classList.remove('hidden');route=session.role==='client'?'my-requests':'dashboard';buildNav();renderWho();updateBell();render();}
   } catch (error) {
     document.body.innerHTML = `<div style="padding:40px;font-family:sans-serif"><h2>Nagare could not connect to the server</h2><p>${esc(error.message)}</p></div>`;
     return;
   }
-  renderLogin();
-  const saved=await Store.currentSession();
-  if (saved && userById(saved)) signIn(saved);
 })();
