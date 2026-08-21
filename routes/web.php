@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\StateController;
+use App\Http\Controllers\GoogleCalendarController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('api')->group(function () {
@@ -10,6 +11,13 @@ Route::prefix('api')->group(function () {
     Route::get('/state', [StateController::class, 'show']);
     Route::put('/state', [StateController::class, 'update']);
     Route::post('/state/reset', [StateController::class, 'reset']);
+    Route::prefix('google-calendar')->group(function () {
+        Route::get('/connect', [GoogleCalendarController::class, 'connect']);
+        Route::get('/callback', [GoogleCalendarController::class, 'callback']);
+        Route::get('/status', [GoogleCalendarController::class, 'status']);
+        Route::get('/events', [GoogleCalendarController::class, 'events']);
+        Route::delete('/disconnect', [GoogleCalendarController::class, 'disconnect']);
+    });
 });
 
 Route::view('/{path?}', 'app')->where('path', '^(?!api).*$');

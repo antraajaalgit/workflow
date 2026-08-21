@@ -6,6 +6,10 @@ const $$ = (s, r=document) => [...r.querySelectorAll(s)];
 let session = null;   // current signed-in user
 let route = 'dashboard';
 let routeParam = null;
+let calendarCursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+let googleCalendarConnected = null;
+let googleCalendarEvents = [];
+let googleCalendarRange = null;
 
 /* ---------- utils ---------- */
 const esc = (s='') => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -40,6 +44,7 @@ function timeAgo(ts) {
   return Math.floor(h/24)+'d ago';
 }
 function clockTime(ts){ return new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); }
+const dateKey = value => { const d=value instanceof Date?value:new Date(value); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 
 /* ---------- ANDON ---------- */
 const ACTIVE = ['new','todo','in_progress','review'];
@@ -237,7 +242,44 @@ function viewDashboard(){
       </div>
     </div>
     <div class="card" style="margin-top:16px"><h3>Live activity (Gemba feed)</h3><div class="list">${feed||'<span class="muted">No activity yet</span>'}</div></div>
+    ${dashboardCalendar(scope)}
   `;
+}
+
+function dashboardCalendar(tasks){
+  const year=calendarCursor.getFullYear(),month=calendarCursor.getMonth();
+  const first=new Date(year,month,1),start=new Date(year,month,1-first.getDay());
+  const today=dateKey(new Date()),taskMap={};
+  tasks.filter(t=>t.dueDate).forEach(t=>(taskMap[dateKey(t.dueDate)]??=[]).push(t));
+  const googleMap={};googleCalendarEvents.forEach(e=>{if(e.start)(googleMap[dateKey(e.start)]??=[]).push(e);});
+  const days=Array.from({length:42},(_,i)=>{const day=new Date(start);day.setDate(start.getDate()+i);const key=dateKey(day),dayTasks=taskMap[key]||[],events=googleMap[key]||[];
+    return `<div class="cal-day ${day.getMonth()!==month?'outside':''} ${key===today?'today':''}">
+      <div class="cal-date"><span>${day.getDate()}</span>${key===today?'<b>Today</b>':''}</div>
+      <div class="cal-items">${dayTasks.map(t=>`<button class="cal-task ${t.status==='done'?'done':''} ${t.dueDate<Date.now()&&t.status!=='done'?'overdue':''}" data-calendar-task="${t.id}" title="${esc(t.title)}"><i></i><span>${esc(t.title)}</span></button>`).join('')}
+      ${events.map(e=>`<a class="cal-google" href="${esc(e.htmlLink||'#')}" target="_blank" rel="noopener" title="Google Calendar: ${esc(e.title)}"><i></i><span>${esc(e.title)}</span></a>`).join('')}</div>
+    </div>`;
+  }).join('');
+  return `<section class="calendar-card" id="dashboard-calendar">
+    <div class="calendar-head"><div><div class="calendar-eyebrow">Schedule</div><h2>Calendar</h2><p>Task deadlines and events from your Google Calendar.</p></div>
+      <div class="calendar-actions"><div class="calendar-nav"><button data-cal-prev aria-label="Previous month">←</button><button data-cal-today>Today</button><button data-cal-next aria-label="Next month">→</button></div><div id="google-calendar-action">${googleCalendarConnected===true?'<button class="btn-ghost small" data-google-disconnect>Disconnect Google</button>':googleCalendarConnected===false?'<a class="btn google-connect" href="/api/google-calendar/connect">Connect Google Calendar</a>':'<span class="muted small">Checking Google Calendar…</span>'}</div></div></div>
+    <div class="calendar-title">${first.toLocaleDateString([], {month:'long',year:'numeric'})}<div class="calendar-legend"><span><i class="task-dot"></i>Nagare task</span><span><i class="google-dot"></i>Google event</span></div></div>
+    <div class="calendar-weekdays">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div>${d}</div>`).join('')}</div><div class="calendar-grid">${days}</div>
+  </section>`;
+}
+
+async function bindDashboardCalendar(){
+  $('[data-cal-prev]')?.addEventListener('click',()=>{calendarCursor=new Date(calendarCursor.getFullYear(),calendarCursor.getMonth()-1,1);render();});
+  $('[data-cal-next]')?.addEventListener('click',()=>{calendarCursor=new Date(calendarCursor.getFullYear(),calendarCursor.getMonth()+1,1);render();});
+  $('[data-cal-today]')?.addEventListener('click',()=>{calendarCursor=new Date(new Date().getFullYear(),new Date().getMonth(),1);render();});
+  $$('[data-calendar-task]').forEach(button=>button.onclick=()=>openTask(button.dataset.calendarTask,session.role==='team'));
+  $('[data-google-disconnect]')?.addEventListener('click',async()=>{await Store.disconnectGoogleCalendar();googleCalendarConnected=false;googleCalendarEvents=[];googleCalendarRange=null;render();toast('Google Calendar disconnected');});
+  if(googleCalendarConnected===null){try{googleCalendarConnected=(await Store.googleCalendarStatus()).connected;}catch(_){googleCalendarConnected=false;}render();return;}
+  if(googleCalendarConnected){
+    const min=new Date(calendarCursor.getFullYear(),calendarCursor.getMonth()-1,20),max=new Date(calendarCursor.getFullYear(),calendarCursor.getMonth()+2,10);
+    const range=`${min.toISOString()}|${max.toISOString()}`;if(googleCalendarRange===range)return;
+    try{const result=await Store.googleCalendarEvents(min.toISOString(),max.toISOString());googleCalendarEvents=result.events||[];googleCalendarRange=range;const node=$('#dashboard-calendar');if(node){node.outerHTML=dashboardCalendar(session.role==='team'?S().tasks.filter(t=>t.ownerId===session.id):S().tasks);bindDashboardCalendar();}}
+    catch(error){googleCalendarConnected=false;toast(error.message);render();}
+  }
 }
 
 /* ---------- PROJECTS ---------- */
@@ -843,10 +885,10 @@ function openTeamTaskForm(){
 /* ============================================================
    TASK MODAL
 ============================================================ */
-function openTask(id){
+function openTask(id, calendarReadOnly=false){
   const t = S().tasks.find(x=>x.id===id); if(!t) return;
   const c=clientById(t.clientId);
-  const canManage = session.role==='admin' || (session.role==='team' && t.ownerId===session.id);
+  const canManage = session.role==='admin' || (!calendarReadOnly && session.role==='team' && t.ownerId===session.id);
   const msgs = S().messages.filter(m=>m.taskId===t.id).sort((a,b)=>a.at-b.at);
   const teamOpts = `<option value="">Unassigned</option>`+S().users.filter(u=>u.role==='team').map(u=>`<option value="${u.id}" ${u.id===t.ownerId?'selected':''}>${esc(u.name)} · ${u.dept}</option>`).join('');
   const lvl=andonLevel(t);
@@ -861,7 +903,7 @@ function openTask(id){
     <div class="form-row">
       <div class="field"><label>Priority</label><select id="m-prio">${['low','med','high'].map(p=>`<option ${t.priority===p?'selected':''}>${p}</option>`).join('')}</select></div>
       <div class="field"><label>${session.role==='admin'?'Department':'Due date'}</label>${session.role==='admin'?`<select id="m-dept">${DEPARTMENTS.map(d=>`<option ${t.dept===d?'selected':''}>${d}</option>`).join('')}</select>`:`<input id="m-due" type="date" value="${t.dueDate?new Date(t.dueDate).toISOString().slice(0,10):''}">`}</div>
-    </div>` : '';
+    </div>${session.role==='admin'?`<div class="field"><label>Due date</label><input id="m-due" type="date" value="${t.dueDate?new Date(t.dueDate).toISOString().slice(0,10):''}"></div>`:''}` : '';
   const modal = document.createElement('div');
   modal.className='modal-scrim';
   modal.innerHTML = `<div class="modal">
@@ -897,7 +939,7 @@ function openTask(id){
       if (ns==='done'){ Notify.both({phone:c.phone,email:c.email,waText:`🎉 Good news ${c.name}! "${t.title}" is completed. Please review.`,emailText:`Subject: Completed — ${t.title}`}); }
     }
     t.title=$('#m-title').value.trim();if(!t.title){toast('Task title is required');return;}t.desc=$('#m-desc').value.trim();t.status=ns;t.priority=$('#m-prio').value;
-    if(session.role==='admin'){t.ownerId=$('#m-owner').value||null;t.dept=$('#m-dept').value;}else{t.ownerId=session.id;t.dept=session.dept;t.dueDate=$('#m-due').value?new Date($('#m-due').value).getTime():null;}
+    if(session.role==='admin'){t.ownerId=$('#m-owner').value||null;t.dept=$('#m-dept').value;t.dueDate=$('#m-due').value?new Date($('#m-due').value).getTime():null;}else{t.ownerId=session.id;t.dept=session.dept;t.dueDate=$('#m-due').value?new Date($('#m-due').value).getTime():null;}
     try{await Store.save();modal.remove();render();buildNav();toast('✅ Task updated');}catch(error){await Store.load();render();toast(error.message);}
   };
   const deleteBtn=modal.querySelector('[data-delete-task]');if(deleteBtn)deleteBtn.onclick=()=>deleteTask(t.id,modal);
@@ -975,6 +1017,7 @@ function bindView(){
   if (fileInput) fileInput.onchange=()=>addRequestFiles(fileInput.files);
   // composers in view
   bindComposer($('#view'));
+  if(route==='dashboard')bindDashboardCalendar();
 }
 
 document.addEventListener('click', e=>{

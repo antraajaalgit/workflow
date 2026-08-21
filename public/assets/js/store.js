@@ -131,6 +131,23 @@ const Store = {
     if (!response.ok) throw new Error('Unable to sign out');
     this.setCsrf((await response.json()).csrfToken);
   },
+  async googleCalendarStatus() {
+    const response = await fetch('/api/google-calendar/status', { headers: this.headers() });
+    if (!response.ok) throw new Error('Unable to check Google Calendar connection');
+    return response.json();
+  },
+  async googleCalendarEvents(timeMin, timeMax) {
+    const params = new URLSearchParams({ timeMin, timeMax });
+    const response = await fetch(`/api/google-calendar/events?${params}`, { headers: this.headers() });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Unable to load Google Calendar events');
+    return data;
+  },
+  async disconnectGoogleCalendar() {
+    const response = await fetch('/api/google-calendar/disconnect', { method:'DELETE', headers:this.headers() });
+    if (!response.ok) throw new Error('Unable to disconnect Google Calendar');
+    return response.json();
+  },
   setCsrf(token) {
     const meta = document.querySelector('meta[name="csrf-token"]');
     if (meta && token) meta.content = token;
