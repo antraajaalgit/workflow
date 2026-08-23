@@ -26,11 +26,55 @@ class StateController extends Controller
     public function update(Request $request): JsonResponse
     {
         $actor = $this->requireUser($request);
+        // $data = $request->validate([
+        //     'clients' => ['present','array'], 'users' => ['present','array'], 'projects' => ['present','array'], 'tasks' => ['present','array'],
+        //     'messages' => ['present','array'], 'activity' => ['present','array'], 'notifications' => ['present','array'],
+        //     'rules' => ['present','array'], 'settings' => ['required','array'],
+        // ]);
         $data = $request->validate([
-            'clients' => ['present','array'], 'users' => ['present','array'], 'projects' => ['present','array'], 'tasks' => ['present','array'],
-            'messages' => ['present','array'], 'activity' => ['present','array'], 'notifications' => ['present','array'],
-            'rules' => ['present','array'], 'settings' => ['required','array'],
-        ]);
+    'clients' => ['present','array'],
+
+   'users' => ['present', 'array'],
+
+'users.*.id' => [
+    'required',
+    'string',
+],
+
+'users.*.name' => [
+    'required',
+    'string',
+],
+
+'users.*.role' => [
+    'required',
+    'in:admin,team,client',
+],
+
+'users.*.email' => [
+    'nullable',
+    'email',
+    'distinct:ignore_case',
+],
+
+'users.*.password' => [
+    'sometimes',
+    'nullable',
+    'string',
+    'min:8',
+],
+
+    'projects' => ['present','array'],
+    'tasks' => ['present','array'],
+    'messages' => ['present','array'],
+    'activity' => ['present','array'],
+    'notifications' => ['present','array'],
+    'rules' => ['present','array'],
+    'settings' => ['required','array'],
+], [
+    'users.*.email.distinct' =>
+        'This email is already being used by another account.',
+]);
         if ($actor->role_id !== 1) {
             $submitted = collect($data['users'])->map(fn($u) => [$u['id'], $u['role'], strtolower($u['email'] ?? '')])->sort()->values()->all();
             $stored = DB::table('users')->get()->map(fn($u) => [$u->id, $u->role, strtolower($u->email ?? '')])->sort()->values()->all();

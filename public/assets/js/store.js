@@ -90,19 +90,61 @@ const Store = {
     this.data = await response.json();
     return this.data;
   },
-  async save() {
-    const response = await fetch('/api/state', {
-      method: 'PUT',
-      headers: this.headers({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(this.data),
-    });
-    if (!response.ok) {
-      let message = 'Unable to save application data';
-      try { message = (await response.json()).message || message; } catch (_) {}
-      throw new Error(message);
+  // async save() {
+  //   const response = await fetch('/api/state', {
+  //     method: 'PUT',
+  //     headers: this.headers({ 'Content-Type': 'application/json' }),
+  //     body: JSON.stringify(this.data),
+  //   });
+  //   if (!response.ok) {
+  //     let message = 'Unable to save application data';
+  //     try { message = (await response.json()).message || message; } catch (_) {}
+  //     throw new Error(message);
+  //   }
+  //   return response.json();
+  // },
+
+
+
+async save(retry = true) {
+  const response = await fetch('/api/state', {
+    method: 'PUT',
+    headers: this.headers({
+      'Content-Type': 'application/json'
+    }),
+    body: JSON.stringify(this.data),
+  });
+
+  // CSRF/session token expired or became stale
+  if (response.status === 419 && retry) {
+    const session = await this.currentSession();
+
+    // Session itself has expired
+    if (!session.userId) {
+      throw new Error('Your session has expired. Please sign in again.');
     }
-    return response.json();
-  },
+
+    // currentSession() refreshes the CSRF token.
+    // Retry the save only once.
+    return this.save(false);
+  }
+
+  if (!response.ok) {
+    let message = 'Unable to save application data';
+
+    try {
+      message = (await response.json()).message || message;
+    } catch (_) {}
+
+    throw new Error(message);
+  }
+
+  return response.json();
+},
+
+
+
+
   async reset() {
     const response = await fetch('/api/state/reset', {
       method: 'POST',

@@ -537,7 +537,29 @@ function openClientForm(clientId=null){
     const password=editing?'':$('#client-password',modal).value;if(!name||!company||!email||!phone||(!editing&&!password)){toast('Complete all required client fields');return;}
     if(!editing&&password.length<8){toast('Password must be at least 8 characters');return;}
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){toast('Enter a valid email address');return;}
-    const duplicate=S().clients.some(c=>c.id!==clientId&&String(c.email||'').toLowerCase()===email.toLowerCase());if(duplicate){toast('A client with this email already exists');return;}
+    //const duplicate=S().clients.some(c=>c.id!==clientId&&String(c.email||'').toLowerCase()===email.toLowerCase());if(duplicate){toast('A client with this email already exists');return;}
+
+const normalizedEmail = email.trim().toLowerCase();
+
+const duplicate = S().users.some(u => {
+  const sameEmail =
+    String(u.email || '').trim().toLowerCase() === normalizedEmail;
+
+  // When editing an existing client, allow their own login email.
+  const ownClientAccount =
+    editing &&
+    u.role === 'client' &&
+    (u.clientId === clientId || u.id === clientId);
+
+  return sameEmail && !ownClientAccount;
+});
+
+if (duplicate) {
+  toast('This email is already being used by another account');
+  return;
+}
+
+
     saveButton.disabled=true;saveButton.innerHTML=`<span class="btn-spinner"></span>${editing?'Saving changes…':'Creating client…'}`;
     if(client){Object.assign(client,{name,company,email,phone,color});const login=S().users.find(u=>u.role==='client'&&(u.clientId===client.id||u.id===client.id));if(login)Object.assign(login,{name,company,email,phone,color,clientId:client.id});}
     else{const id='c_'+Math.random().toString(36).slice(2,9);S().clients.push({id,name,company,email,phone,color});S().users.push({id,name,role:'client',roleId:0,dept:null,clientId:id,company,email,phone,color,password});}

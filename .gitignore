@@ -9,3 +9,4 @@
 /storage/logs/*
 /.idea
 /.vscode
+.env.server-backup
