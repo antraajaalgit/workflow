@@ -148,7 +148,7 @@ class StateController extends Controller
         DB::table('projects')->insert(array_map(fn($x)=>['id'=>$x['id'],'client_id'=>$x['clientId']??null,'name'=>$x['name'],'description'=>$x['desc']??null,'status'=>$x['status']??'active','due_date_ms'=>$x['dueDate']??null,'created_at'=>$now,'updated_at'=>$now],$s['projects']));
         $hasAttachments = Schema::hasColumn('tasks', 'attachments');
         DB::table('tasks')->insert(array_map(function ($x) use ($now, $hasAttachments) {
-            $task = ['id'=>$x['id'],'client_id'=>$x['clientId']??null,'project_id'=>$x['projectId']??null,'title'=>$x['title'],'description'=>$x['desc']??null,'department'=>$x['dept'],'owner_id'=>$x['ownerId']??null,'status'=>$x['status'],'priority'=>$x['priority'],'created_at_ms'=>$x['createdAt'],'stage_at_ms'=>$x['stageAt'],'due_date_ms'=>$x['dueDate']??null,'recurring'=>$x['recurring']??null,'created_at'=>$now,'updated_at'=>$now];
+            $task = ['id'=>$x['id'],'client_id'=>$x['clientId']??null,'project_id'=>$x['projectId']??null,'title'=>$x['title'],'description'=>$x['desc']??null,'department'=>filled($x['dept']??null)?$x['dept']:'General','owner_id'=>$x['ownerId']??null,'status'=>$x['status'],'priority'=>$x['priority'],'created_at_ms'=>$x['createdAt'],'stage_at_ms'=>$x['stageAt'],'due_date_ms'=>$x['dueDate']??null,'recurring'=>$x['recurring']??null,'created_at'=>$now,'updated_at'=>$now];
             if ($hasAttachments) $task['attachments'] = json_encode($x['attachments'] ?? []);
             return $task;
         }, $s['tasks']));

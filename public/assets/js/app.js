@@ -317,7 +317,7 @@ function projectTaskRow(index, task=null){
     <div class="project-task-head"><div class="project-task-number">${index+1}</div><div><b>${task?'Existing task':'New task'}</b><span>${task?'Update its details or assignment':'Define and assign this task'}</span></div><button class="btn-ghost small" type="button" data-remove-project-task>Remove</button></div>
     <div class="field"><label>Task title <span class="req">*</span></label><input data-pt-title value="${esc(task?.title||'')}" placeholder="e.g. Design homepage mockup"></div>
     <div class="form-row">
-      <div class="field"><label>Assign to <span class="req">*</span></label><select data-pt-owner><option value="">Select team member</option>${members.map(u=>`<option value="${u.id}" ${u.id===task?.ownerId?'selected':''}>${esc(u.name)} · ${esc(u.dept)}</option>`).join('')}</select></div>
+      <div class="field"><label>Assign to <span class="req">*</span></label><select data-pt-owner><option value="">Select team member</option>${members.map(u=>`<option value="${u.id}" ${u.id===task?.ownerId?'selected':''}>${esc(u.name)} · ${esc(u.dept||'General')}</option>`).join('')}</select></div>
       <div class="field"><label>Priority</label><select data-pt-priority>${['low','med','high'].map(p=>`<option value="${p}" ${(task?.priority||'med')===p?'selected':''}>${p==='med'?'Medium':p[0].toUpperCase()+p.slice(1)}</option>`).join('')}</select></div>
     </div>
     <div class="field"><label>Description</label><textarea data-pt-desc rows="2" placeholder="What needs to be done?">${esc(task?.desc||'')}</textarea></div>
@@ -384,7 +384,7 @@ function openProjectForm(projectId=null){
     const removedIds=projectTasks.filter(t=>!retainedIds.includes(t.id)).map(t=>t.id);
     S().tasks=S().tasks.filter(t=>!removedIds.includes(t.id));
     S().messages.forEach(m=>{if(removedIds.includes(m.taskId))m.taskId=null;});
-    rows.forEach(row=>{const owner=userById($('[data-pt-owner]',row).value);const existing=row.dataset.taskId?S().tasks.find(t=>t.id===row.dataset.taskId):null;const values={projectId:id,clientId,title:$('[data-pt-title]',row).value.trim(),desc:$('[data-pt-desc]',row).value.trim(),dept:owner.dept,ownerId:owner.id,priority:$('[data-pt-priority]',row).value,dueDate:due,attachments:row._attachments||[]};if(existing)Object.assign(existing,values);else S().tasks.push({id:'t_'+Math.random().toString(36).slice(2,9),...values,status:'todo',createdAt:now,stageAt:now,recurring:null});});
+    rows.forEach(row=>{const owner=userById($('[data-pt-owner]',row).value);const existing=row.dataset.taskId?S().tasks.find(t=>t.id===row.dataset.taskId):null;const values={projectId:id,clientId,title:$('[data-pt-title]',row).value.trim(),desc:$('[data-pt-desc]',row).value.trim(),dept:owner.dept||'General',ownerId:owner.id,priority:$('[data-pt-priority]',row).value,dueDate:due,attachments:row._attachments||[]};if(existing)Object.assign(existing,values);else S().tasks.push({id:'t_'+Math.random().toString(36).slice(2,9),...values,status:'todo',createdAt:now,stageAt:now,recurring:null});});
     try{await Store.save();logActivity(`Project "${name}" ${editing?'updated':'created'} with ${rows.length} assigned task${rows.length===1?'':'s'}`,'brief');close();go('projects');toast(editing?'✅ Project updated':'✅ Project and tasks created');}catch(error){await Store.load();render();toast(error.message);}
   };
 }
