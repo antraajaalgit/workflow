@@ -51,10 +51,51 @@ class StateController extends Controller
     'in:admin,team,client',
 ],
 
+'users.*.roleId' => [
+    'sometimes',
+    'nullable',
+    'integer',
+],
+
+'users.*.dept' => [
+    'sometimes',
+    'nullable',
+    'string',
+    'max:40',
+],
+
+'users.*.clientId' => [
+    'sometimes',
+    'nullable',
+    'string',
+    'max:40',
+],
+
+'users.*.company' => [
+    'sometimes',
+    'nullable',
+    'string',
+    'max:255',
+],
+
 'users.*.email' => [
     'nullable',
     'email',
     'distinct:ignore_case',
+],
+
+'users.*.phone' => [
+    'sometimes',
+    'nullable',
+    'string',
+    'max:40',
+],
+
+'users.*.color' => [
+    'sometimes',
+    'nullable',
+    'string',
+    'max:20',
 ],
 
 'users.*.password' => [
