@@ -310,12 +310,12 @@ function bindProjectTaskFiles(list){
 function openProjectForm(projectId=null){
   const project=projectById(projectId); const editing=!!project;
   const projectTasks=editing?S().tasks.filter(t=>t.projectId===project.id):[];
-  const clientOpts=S().clients.map(c=>`<option value="${c.id}" ${c.id===project?.clientId?'selected':''}>${esc(c.company)}</option>`).join('');
+  const clientOpts=`<option value="" ${project?.clientId?'':'selected'}>No client</option>`+S().clients.map(c=>`<option value="${c.id}" ${c.id===project?.clientId?'selected':''}>${esc(c.company)}</option>`).join('');
   const dueValue=project?.dueDate?new Date(project.dueDate).toISOString().slice(0,10):'';
   const modal=document.createElement('div'); modal.className='modal-scrim';
   modal.innerHTML=`<div class="modal project-modal"><div class="modal-head"><div><h2>${editing?'Edit project':'Create a new project'}</h2><p class="muted small">${editing?'Update project details, assignments, or add more tasks.':'Plan the work and assign ownership from the start.'}</p></div><button class="btn-ghost" data-close>✕</button></div>
     <div class="modal-body">
-      <div class="project-form-section"><h3>Project details</h3><div class="form-row"><div class="field"><label>Project name <span class="req">*</span></label><input id="project-name" value="${esc(project?.name||'')}" placeholder="e.g. Website redesign"></div><div class="field"><label>Client <span class="req">*</span></label><select id="project-client">${clientOpts}</select></div></div>
+      <div class="project-form-section"><h3>Project details</h3><div class="form-row"><div class="field"><label>Project name <span class="req">*</span></label><input id="project-name" value="${esc(project?.name||'')}" placeholder="e.g. Website redesign"></div><div class="field"><label>Client</label><select id="project-client">${clientOpts}</select></div></div>
       <div class="field"><label>Description</label><textarea id="project-desc" placeholder="Project scope and goals">${esc(project?.desc||'')}</textarea></div>
       <div class="field"><label>Due date</label><input id="project-due" type="date" value="${dueValue}"></div></div>
       <div class="project-form-section"><div class="section-head"><div><h3>Task list</h3><p class="muted small">Every task must have one accountable team member.</p></div><button class="btn-2 small" type="button" id="add-project-task">+ Add task</button></div>
@@ -335,7 +335,7 @@ function openProjectForm(projectId=null){
     if(rows.some(row=>row._reading>0)){toast('Please wait for attachments to finish loading');return;}
     const invalid=rows.some(row=>!$('[data-pt-title]',row).value.trim()||!$('[data-pt-owner]',row).value);
     if(invalid){toast('Every task needs a title and assigned team member');return;}
-    const id=project?.id||'p_'+Math.random().toString(36).slice(2,9), clientId=$('#project-client',modal).value, now=Date.now();
+    const id=project?.id||'p_'+Math.random().toString(36).slice(2,9), clientId=$('#project-client',modal).value||null, now=Date.now();
     const due=$('#project-due',modal).value?new Date($('#project-due',modal).value).getTime():null;
     if(project) Object.assign(project,{clientId,name,desc:$('#project-desc',modal).value.trim(),dueDate:due});
     else S().projects.push({id,clientId,name,desc:$('#project-desc',modal).value.trim(),status:'active',dueDate:due});
