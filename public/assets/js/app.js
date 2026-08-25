@@ -524,18 +524,21 @@ function viewClientFolder(){
 function openClientForm(clientId=null){
   if(session.role!=='admin')return;
   const client=clientById(clientId),editing=!!client;
+  const assignedProject=(S().projects||[]).find(p=>p.clientId===clientId);
+  const projectOpts=`<option value="">No project</option>`+(S().projects||[]).map(p=>`<option value="${p.id}" ${p.id===assignedProject?.id?'selected':''}>${esc(p.name)}${p.clientId&&p.clientId!==clientId?` · ${esc(clientById(p.clientId)?.company||'Another client')}`:''}</option>`).join('');
   const modal=document.createElement('div');modal.className='modal-scrim';
   modal.innerHTML=`<div class="modal"><div class="modal-head"><div><h2>${editing?'Edit client':'Add new client'}</h2><p class="muted small">${editing?'Keep the client profile and login details up to date.':'A client folder and client login will be created together.'}</p></div><button class="btn-ghost" data-close>✕</button></div>
     <div class="modal-body">
       <div class="form-row"><div class="field"><label>Contact name <span class="req">*</span></label><input id="client-name" value="${esc(client?.name||'')}" placeholder="e.g. Priya Nair"></div><div class="field"><label>Company <span class="req">*</span></label><input id="client-company" value="${esc(client?.company||'')}" placeholder="e.g. Lumen Cafe"></div></div>
       <div class="form-row"><div class="field"><label>Email <span class="req">*</span></label><input id="client-email" type="email" value="${esc(client?.email||'')}" placeholder="client@company.com"></div><div class="field"><label>Phone <span class="req">*</span></label><input id="client-phone" type="tel" value="${esc(client?.phone||'')}" placeholder="+91 98765 43210"></div></div>
+      <div class="field"><label>Project</label><select id="client-project">${projectOpts}</select><div class="hint">Choose a project to link to this client, or leave it as No project.</div></div>
       ${editing?'':passwordField('client-password')}
       <div class="field"><label>Folder color</label><div class="color-field"><input id="client-color" type="color" value="${esc(client?.color||'#7a5c3e')}"><span class="muted small">Used for the client avatar and visual identity.</span></div></div>
     </div><div class="modal-foot"><button class="btn-ghost" data-close>Cancel</button><button class="btn" id="save-client">${editing?'Save changes':'Create client'}</button></div></div>`;
   $('#modal-host').appendChild(modal);bindPasswordTools(modal);const close=()=>modal.remove();modal.querySelectorAll('[data-close]').forEach(b=>b.onclick=close);modal.onclick=e=>{if(e.target===modal)close();};
   $('#save-client',modal).onclick=async()=>{
     const saveButton=$('#save-client',modal);
-    const name=$('#client-name',modal).value.trim(),company=$('#client-company',modal).value.trim(),email=$('#client-email',modal).value.trim(),phone=$('#client-phone',modal).value.trim(),color=$('#client-color',modal).value;
+    const name=$('#client-name',modal).value.trim(),company=$('#client-company',modal).value.trim(),email=$('#client-email',modal).value.trim(),phone=$('#client-phone',modal).value.trim(),color=$('#client-color',modal).value,projectId=$('#client-project',modal).value||null;
     const password=editing?'':$('#client-password',modal).value;if(!name||!company||!email||!phone||(!editing&&!password)){toast('Complete all required client fields');return;}
     if(!editing&&password.length<8){toast('Password must be at least 8 characters');return;}
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){toast('Enter a valid email address');return;}
@@ -563,8 +566,11 @@ if (duplicate) {
 
 
     saveButton.disabled=true;saveButton.innerHTML=`<span class="btn-spinner"></span>${editing?'Saving changes…':'Creating client…'}`;
+    let savedClientId=client?.id;
     if(client){Object.assign(client,{name,company,email,phone,color});const login=S().users.find(u=>u.role==='client'&&(u.clientId===client.id||u.id===client.id));if(login)Object.assign(login,{name,company,email,phone,color,clientId:client.id});}
-    else{const id='c_'+Math.random().toString(36).slice(2,9);S().clients.push({id,name,company,email,phone,color});S().users.push({id,name,role:'client',roleId:0,dept:null,clientId:id,company,email,phone,color,password});}
+    else{savedClientId='c_'+Math.random().toString(36).slice(2,9);S().clients.push({id:savedClientId,name,company,email,phone,color});S().users.push({id:savedClientId,name,role:'client',roleId:0,dept:null,clientId:savedClientId,company,email,phone,color,password});}
+    if(assignedProject&&assignedProject.id!==projectId){assignedProject.clientId=null;S().tasks.filter(t=>t.projectId===assignedProject.id).forEach(t=>t.clientId=null);}
+    const selectedProject=projectById(projectId);if(selectedProject){selectedProject.clientId=savedClientId;S().tasks.filter(t=>t.projectId===selectedProject.id).forEach(t=>t.clientId=savedClientId);}
     try{const result=await Store.save();S().users.forEach(u=>delete u.password);logActivity(`Client ${company} ${editing?'updated':'added'}`,'brief');close();render();toast(editing?'✅ Client updated':result.mailFailures?.length?'✅ Client created, but the login email could not be sent':'✅ Client created — login email sent');}catch(error){await Store.load();render();saveButton.disabled=false;saveButton.textContent=editing?'Save changes':'Create client';toast(error.message);}
   };
 }
