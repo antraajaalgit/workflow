@@ -6,6 +6,7 @@ const $$ = (s, r=document) => [...r.querySelectorAll(s)];
 let session = null;   // current signed-in user
 let route = 'dashboard';
 let routeParam = null;
+let tasksPage = 1;
 let calendarCursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 let googleCalendarConnected = null;
 let googleCalendarEvents = [];
@@ -206,7 +207,10 @@ function viewDashboard(){
 
   const kpi = (val,lab,sub='',subcolor='') => `<div class="kpi"><div class="k-val">${val}</div><div class="k-lab">${lab}</div>${sub?`<div class="k-sub" style="color:${subcolor}">${sub}</div>`:''}</div>`;
 
-  const redRows = red.length ? red.map(andonRow).join('') :
+  const projectIds=[...new Set(red.map(t=>t.projectId).filter(id=>projectById(id)))];
+  const groupedRed=projectIds.map(projectId=>{const project=projectById(projectId),tasks=red.filter(t=>t.projectId===projectId);return `<div style="margin-bottom:16px"><div class="muted small" style="font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin:0 0 7px 18px">📌 ${esc(project.name)}</div>${tasks.map(andonRow).join('')}</div>`;}).join('');
+  const ungroupedRed=red.filter(t=>!projectById(t.projectId)).map(andonRow).join('');
+  const redRows = red.length ? groupedRed+ungroupedRed :
     `<div class="empty" style="padding:26px"><div class="e-ic">✅</div>No stuck tasks. Flow is smooth.</div>`;
 
   // workload
@@ -1008,8 +1012,10 @@ async function deleteTask(taskId,modal=null){
    TASKS
 ============================================================ */
 function viewTasks(){
-  const rows=S().tasks.map(t=>{const client=clientById(t.clientId),project=projectById(t.projectId),owner=userById(t.ownerId);return `<div class="row-item" data-task="${t.id}" style="cursor:pointer"><div style="flex:1;min-width:0"><b style="font-size:14px">${esc(t.title)}</b><div class="muted small">${esc(client?.company||'No client')} · ${esc(project?.name||'No project')} · ${owner?esc(owner.name):'Unassigned'}</div></div><span class="prio ${t.priority}">${t.priority}</span><span class="status-pill st-${t.status}">${t.status.replace('_',' ')}</span><div class="member-actions"><button class="btn-ghost small" data-edit-task="${t.id}">✏️ Edit</button><button class="btn-ghost small btn-delete-client" data-delete-task="${t.id}">🗑️ Delete</button></div></div>`;}).join('');
-  return `<div class="section-head"><p class="muted">Create and manage individual tasks across clients and projects.</p><button class="btn" data-new-task>+ New task</button></div><div class="list">${rows||'<div class="empty"><div class="e-ic">✅</div>No tasks yet</div>'}</div>`;
+  const all=S().tasks,pageSize=10,totalPages=Math.max(1,Math.ceil(all.length/pageSize));tasksPage=Math.min(Math.max(1,tasksPage),totalPages);
+  const rows=all.slice((tasksPage-1)*pageSize,tasksPage*pageSize).map(t=>{const client=clientById(t.clientId),project=projectById(t.projectId),owner=userById(t.ownerId);return `<div class="row-item" data-task="${t.id}" style="cursor:pointer"><div style="flex:1;min-width:0"><b style="font-size:14px">${esc(t.title)}</b><div class="muted small">${esc(client?.company||'No client')} · ${esc(project?.name||'No project')} · ${owner?esc(owner.name):'Unassigned'}</div></div><span class="prio ${t.priority}">${t.priority}</span><span class="status-pill st-${t.status}">${t.status.replace('_',' ')}</span><div class="member-actions"><button class="btn-ghost small" data-edit-task="${t.id}">✏️ Edit</button><button class="btn-ghost small btn-delete-client" data-delete-task="${t.id}">🗑️ Delete</button></div></div>`;}).join('');
+  const pagination=totalPages>1?`<div class="section-head" style="margin-top:14px"><button class="btn-ghost small" data-tasks-page="${tasksPage-1}" ${tasksPage===1?'disabled':''}>← Previous</button><span class="muted small">Page ${tasksPage} of ${totalPages} · ${all.length} tasks</span><button class="btn-ghost small" data-tasks-page="${tasksPage+1}" ${tasksPage===totalPages?'disabled':''}>Next →</button></div>`:'';
+  return `<div class="section-head"><p class="muted">Create and manage individual tasks across clients and projects.</p><button class="btn" data-new-task>+ New task</button></div><div class="list">${rows||'<div class="empty"><div class="e-ic">✅</div>No tasks yet</div>'}</div>${pagination}`;
 }
 
 function openNewTask(){
@@ -1080,6 +1086,7 @@ function bindView(){
   const nt=$('[data-new-task]'); if(nt) nt.onclick=openNewTask;
   $$('[data-edit-task]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();openTask(btn.dataset.editTask);});
   $$('[data-delete-task]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();deleteTask(btn.dataset.deleteTask);});
+  $$('[data-tasks-page]').forEach(btn=>btn.onclick=()=>{if(btn.disabled)return;tasksPage=Number(btn.dataset.tasksPage);render();});
   const am=$('[data-add-member]'); if(am) am.onclick=()=>openTeamMember();
   $$('[data-edit-member]').forEach(b=>b.onclick=()=>openTeamMember(b.dataset.editMember));
   $$('[data-delete-member]').forEach(b=>b.onclick=()=>deleteTeamMember(b.dataset.deleteMember));
