@@ -38,6 +38,6 @@
   <div id="scrim" class="scrim hidden"></div>
   <div id="modal-host"></div>
   <script src="{{ asset('assets/js/store.js') }}?v=10"></script>
-  <script src="{{ asset('assets/js/app.js') }}?v=18"></script>
+  <script src="{{ asset('assets/js/app.js') }}?v=19"></script>
 </body>
 </html>

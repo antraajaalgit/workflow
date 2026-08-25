@@ -176,8 +176,10 @@ function go(r, param=null){ route=r; routeParam=param; buildNav(); render(); }
 ============================================================ */
 const TITLES = {dashboard:'Dashboard', projects:'Projects', andon:'Andon Board', kanban:'Kanban Flow', clients:'Client Folders', inbox:'Inbox', recurring:'Recurring Tasks', team:'Team & Workload', settings:'Settings', 'my-requests':'My Requests', 'new-request':'New Request', messages:'Messages', 'client-folder':'Client Folder'};
 function render(){
-  $('#page-title').textContent = TITLES[route] || '';
+  const pageTitle = $('#page-title');
   const v = $('#view');
+  if (!pageTitle || !v || !session || !S()) return;
+  pageTitle.textContent = TITLES[route] || '';
   const R = {
     dashboard: viewDashboard, projects: viewProjects, andon: viewAndon, kanban: viewKanban,
     clients: viewClients, 'client-folder': viewClientFolder, inbox: viewInbox,
@@ -761,10 +763,11 @@ function sendMessage(clientId, taskId, text, voice){
   S().messages.push(msg); Store.save();
   const c = clientById(clientId);
   if (session.role==='client'){
-    logActivity(`${c.name} (${c.company}) sent a ${voice?'voice note':'message'}`,'msg');
+    const clientName=c?.name||'Client',company=c?.company||'No client';
+    logActivity(`${clientName} (${company}) sent a ${voice?'voice note':'message'}`,'msg');
     Notify.both({ phone:'+91 agency-team', email:'team@antrajaal.com',
-      waText:`💬 New message from ${c.name} (${c.company}): "${voice?'🎤 voice note':text}"`,
-      emailText:`Subject: New message from ${c.company}` });
+      waText:`💬 New message from ${clientName} (${company}): "${voice?'🎤 voice note':text}"`,
+      emailText:`Subject: New message from ${company}` });
   } else {
     Notify.both({ phone:c.phone, email:c.email,
       waText:`💬 ${session.name} from Antrajaal replied: "${voice?'🎤 voice note':text}"`,
@@ -791,10 +794,11 @@ function submitRequest(){
   if (pendingVoice){ sendMessageRaw(session.clientId, task.id, '', pendingVoice); }
   Store.save();
   const c=clientById(session.clientId);
-  logActivity(`New brief from ${c.company} awaiting assignment`,'brief');
+  const clientName=c?.name||'Client',company=c?.company||'No client';
+  logActivity(`New brief from ${company} awaiting assignment`,'brief');
   // notify agency
   Notify.both({ phone:'+91 agency-team', email:'team@antrajaal.com',
-    waText:`📥 New request from ${c.name} (${c.company}): "${title}" → awaiting assignment`,
+    waText:`📥 New request from ${clientName} (${company}): "${title}" → awaiting assignment`,
     emailText:`Subject: New brief — ${title}` });
   // confirm to client
   Notify.both({ phone:c.phone, email:c.email,
@@ -1063,6 +1067,7 @@ function renderNotifs(){
   try {
     await Store.load();
   } catch (error) {
+    session = null;
     document.body.innerHTML = `<div style="padding:40px;font-family:sans-serif"><h2>Nagare could not connect to the server</h2><p>${esc(error.message)}</p></div>`;
     return;
   }
