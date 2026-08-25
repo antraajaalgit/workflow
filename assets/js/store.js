@@ -102,4 +102,10 @@ const Store = {
     if (!response.ok) throw new Error('Unable to reset application data');
     this.data = await response.json();
   },
+  async sendChatEmail(payload) {
+    const response = await fetch('/api/chat-email', {method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(payload)});
+    const data = await response.json();
+    if(!response.ok)throw new Error(data.message||'Unable to email the client');
+    return data;
+  },
 };

@@ -13,6 +13,19 @@ return [
             'password' => env('MAIL_PASSWORD'),
             'timeout' => null,
         ],
+         'chat_smtp' => [
+        'transport' => 'smtp',
+        'scheme' => env('CHAT_MAIL_SCHEME', 'smtps'),
+        'host' => env('CHAT_MAIL_HOST', 'smtp.hostinger.com'),
+        'port' => env('CHAT_MAIL_PORT', 465),
+        'username' => env('CHAT_MAIL_USERNAME'),
+        'password' => env('CHAT_MAIL_PASSWORD'),
+        'timeout' => null,
+    ],
+    ],
+    'chat_from' => [
+        'address' => env('CHAT_MAIL_FROM_ADDRESS', env('CHAT_MAIL_USERNAME', 'hello@antraajaal.com')),
+        'name' => env('CHAT_MAIL_FROM_NAME', 'Nagare by Antrajaal'),
     ],
     'from' => ['address' => env('MAIL_FROM_ADDRESS', 'hello@antraajaal.com'), 'name' => env('MAIL_FROM_NAME', 'Nagare by Antrajaal')],
 ];

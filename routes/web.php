@@ -12,6 +12,7 @@ Route::prefix('api')->group(function () {
     Route::put('/state', [StateController::class, 'update']);
     Route::post('/state/reset', [StateController::class, 'reset']);
     Route::post('/chat-attachments', [StateController::class, 'uploadChatAttachments']);
+    Route::post('/chat-email', [StateController::class, 'sendChatEmail'])->middleware('throttle:30,1');
     //Route::get('/chat-attachments/{file}', [StateController::class, 'showChatAttachment']);
     Route::get('/chat-attachment', [StateController::class, 'showChatAttachment']);
     Route::prefix('google-calendar')->group(function () {

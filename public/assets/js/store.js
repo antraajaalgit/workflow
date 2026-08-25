@@ -197,6 +197,12 @@ async save(retry = true) {
     if(!response.ok)throw new Error(data.message||'Unable to upload attachments');
     return data.attachments||[];
   },
+  async sendChatEmail(payload) {
+    const response = await fetch('/api/chat-email', {method:'POST',headers:this.headers({'Content-Type':'application/json'}),body:JSON.stringify(payload)});
+    const data = await response.json();
+    if(!response.ok)throw new Error(data.message||'Unable to email the client');
+    return data;
+  },
   setCsrf(token) {
     const meta = document.querySelector('meta[name="csrf-token"]');
     if (meta && token) meta.content = token;

@@ -225,6 +225,53 @@ class StateController extends Controller
         return response()->json(['attachments' => $attachments]);
     }
 
+    public function sendChatEmail(Request $request): JsonResponse
+    {
+        $actor = $this->requireUser($request);
+        abort_unless(in_array($actor->role, ['admin', 'team'], true), 403, 'Only staff can email clients.');
+
+        $data = $request->validate([
+            'clientId' => ['required', 'string', 'max:40'],
+            'taskId' => ['nullable', 'string', 'max:40'],
+            'text' => ['nullable', 'string', 'max:10000'],
+            'hasVoice' => ['sometimes', 'boolean'],
+            'attachmentNames' => ['sometimes', 'array', 'max:10'],
+            'attachmentNames.*' => ['string', 'max:255'],
+        ]);
+
+        $client = DB::table('clients')->where('id', $data['clientId'])->first();
+        abort_unless($client, 404, 'Client not found.');
+        abort_unless(filled($client->email), 422, 'This client does not have an email address.');
+
+        $taskTitle = filled($data['taskId'] ?? null)
+            ? DB::table('tasks')->where('id', $data['taskId'])->value('title')
+            : null;
+        $subject = $taskTitle ? "New message about {$taskTitle}" : 'New message from your Antrajaal team';
+        $lines = ["Hello {$client->name},", '', "{$actor->name} from Antrajaal sent you a message:", ''];
+        if (filled($data['text'] ?? null)) $lines[] = $data['text'];
+        if ($data['hasVoice'] ?? false) $lines[] = '[A voice note is available in Nagare.]';
+        if (!empty($data['attachmentNames'])) $lines[] = '[Attachments in Nagare: '.implode(', ', $data['attachmentNames']).']';
+        $lines[] = '';
+        $lines[] = 'Open Nagare to view the conversation and reply: '.url('/');
+
+        try {
+            Mail::mailer('chat_smtp')->raw(implode("\n", $lines), function ($message) use ($client, $subject) {
+                $message->from(config('mail.chat_from.address'), config('mail.chat_from.name'))
+                    ->to($client->email, $client->name)
+                    ->subject($subject);
+            });
+        } catch (\Throwable $exception) {
+            Log::warning('Nagare client chat email could not be sent.', [
+                'client_id' => $client->id,
+                'recipient' => $client->email,
+                'error' => $exception->getMessage(),
+            ]);
+            return response()->json(['message' => 'The chat message was saved, but its email could not be sent.'], 502);
+        }
+
+        return response()->json(['sent' => true]);
+    }
+
     // public function showChatAttachment(Request $request, string $file): BinaryFileResponse
     // {
     //     $this->requireUser($request);
