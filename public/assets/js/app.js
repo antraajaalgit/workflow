@@ -300,7 +300,7 @@ function viewProjects(){
           </div>
         </div>
       </div>
-      <div class="project-client">${esc(c?.company||'Unknown client')}</div>
+      <div class="project-client">${esc(c?.company||'No client')}</div>
       <h3>${esc(p.name)}</h3>
       ${p.desc?`<p>${esc(p.desc)}</p>`:'<p class="muted">No project description</p>'}
       <div class="project-progress"><div><span>Progress</span><b>${complete}/${tasks.length} tasks</b></div><div class="bar"><i style="width:${progress}%"></i></div></div>
@@ -405,7 +405,7 @@ function andonRow(t){
   const c = clientById(t.clientId);
   return `<div class="andon-row ${lvl}" data-task="${t.id}">
     <span class="light ${lvl}"></span>
-    <div class="a-main"><b>${esc(t.title)}</b><span>${esc(c.company)} · ${t.dept} · ${owner?esc(owner.name):'Unassigned'}</span></div>
+    <div class="a-main"><b>${esc(t.title)}</b><span>${esc(c?.company||'No client')} · ${t.dept} · ${owner?esc(owner.name):'Unassigned'}</span></div>
     <span class="status-pill st-${t.status}">${t.status.replace('_',' ')}</span>
     <span class="timer ${lvl==='green'?'':lvl}" data-timer="${t.id}">${fmtElapsed(t)}</span>
   </div>`;
@@ -601,7 +601,7 @@ function viewRecurring(){
     const c=clientById(t.clientId), owner=userById(t.ownerId);
     return `<div class="row-item">
       <span style="font-size:16px">🔁</span>
-      <div style="flex:1"><b style="font-size:14px">${esc(t.title)}</b><div class="muted small">${esc(c.company)} · ${t.dept} · ${owner?esc(owner.name):'—'}</div></div>
+      <div style="flex:1"><b style="font-size:14px">${esc(t.title)}</b><div class="muted small">${esc(c?.company||'No client')} · ${t.dept} · ${owner?esc(owner.name):'—'}</div></div>
       <span class="pill">${t.recurring}</span>
       <span class="status-pill st-${t.status}">${t.status.replace('_',' ')}</span>
     </div>`;
@@ -946,7 +946,7 @@ function openTask(id, calendarReadOnly=false){
     </div>
     <div class="modal-body">
       <div class="chips" style="margin-bottom:14px">
-        <span class="chip" style="cursor:default">📁 ${esc(c.company)}</span>
+        <span class="chip" style="cursor:default">📁 ${esc(c?.company||'No client')}</span>
         <span class="chip" style="cursor:default">${t.dept}</span>
         <span class="chip" style="cursor:default">⏱ ${ACTIVE.includes(t.status)?fmtElapsed(t)+' in stage':'—'}</span>
         ${t.recurring?`<span class="chip" style="cursor:default">🔁 ${t.recurring}</span>`:''}
