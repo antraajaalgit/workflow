@@ -19,6 +19,9 @@ const clientById = id => S().clients.find(c => c.id === id);
 const projectById = id => (S().projects || []).find(p => p.id === id);
 const tasksOf = cid => S().tasks.filter(t => t.clientId === cid);
 const initials = n => n.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+const TASK_PROGRESS_OPTIONS = [['just_started','Just started'],['25','25% done'],['50','50% done'],['75','75% done'],['completed','Completed']];
+const taskProgressOptions = value => TASK_PROGRESS_OPTIONS.map(([id,label])=>`<option value="${id}" ${(value||'just_started')===id?'selected':''}>${label}</option>`).join('');
+const taskProgressLabel = value => TASK_PROGRESS_OPTIONS.find(([id])=>id===(value||'just_started'))?.[1] || 'Just started';
 function generatePassword(length=14){
   const chars='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
   const bytes=new Uint32Array(length);crypto.getRandomValues(bytes);
@@ -51,7 +54,7 @@ const dateKey = value => { const d=value instanceof Date?value:new Date(value); 
 const ACTIVE = ['new','todo','in_progress','review'];
 function elapsedMs(t){ return Date.now() - t.stageAt; }
 function andonLevel(t){
-  if (!ACTIVE.includes(t.status)) return 'done';
+  if (t.progress==='completed' || !ACTIVE.includes(t.status)) return 'done';
   const m = elapsedMs(t)/60000;
   const {amberMin, redMin} = S().settings;
   if (m >= redMin) return 'red';
@@ -108,7 +111,7 @@ function delegate(text){
   }
   return 'Design'; // fallback
 }
-function activeLoad(uid){ return S().tasks.filter(t=>t.ownerId===uid && ACTIVE.includes(t.status)).length; }
+function activeLoad(uid){ return S().tasks.filter(t=>t.ownerId===uid && ACTIVE.includes(t.status) && t.progress!=='completed').length; }
 
 /* ============================================================
    AUTH
@@ -199,7 +202,7 @@ function render(){
 /* ---------- DASHBOARD ---------- */
 function viewDashboard(){
   const scope = session.role==='team' ? S().tasks.filter(t=>t.ownerId===session.id) : S().tasks;
-  const active = scope.filter(t=>ACTIVE.includes(t.status));
+  const active = scope.filter(t=>ACTIVE.includes(t.status) && t.progress!=='completed');
   const red = scope.filter(t=>andonLevel(t)==='red');
   const amber = scope.filter(t=>andonLevel(t)==='amber');
   const doneToday = scope.filter(t=>t.status==='done').length;
@@ -224,6 +227,12 @@ function viewDashboard(){
       </div>
       <div class="bar"><i style="width:${activeLoad(u.id)/maxLoad*100}%;background:${activeLoad(u.id)>=4?'var(--red)':'var(--accent2)'}"></i></div>
     </div>`).join('');
+  const progressRows = team.map(u=>{
+    const memberTasks=S().tasks.filter(t=>t.ownerId===u.id);
+    return `<div class="row-item"><div style="flex:1;min-width:150px">${avatar(u)} <b>${esc(u.name)}</b><div class="muted small">${memberTasks.length} task${memberTasks.length===1?'':'s'}</div></div><div class="chips" style="justify-content:flex-end">${TASK_PROGRESS_OPTIONS.map(([id,label])=>`<span class="chip" style="cursor:default">${label}: <b>${memberTasks.filter(t=>(t.progress||'just_started')===id).length}</b></span>`).join('')}</div></div>`;
+  }).join('');
+  const ownProgressSummary=TASK_PROGRESS_OPTIONS.map(([id,label])=>`<span class="chip" style="cursor:default">${label}: <b>${scope.filter(t=>(t.progress||'just_started')===id).length}</b></span>`).join('');
+  const ownProgressRows=scope.map(t=>`<div class="row-item" data-task="${t.id}" style="cursor:pointer"><div style="flex:1"><b>${esc(t.title)}</b><div class="muted small">${esc(projectById(t.projectId)?.name||'Standalone task')}</div></div><span class="status-pill">${taskProgressLabel(t.progress)}</span></div>`).join('');
 
   const feed = S().activity.slice(0,8).map(a=>`
     <div class="row-item" style="padding:10px 12px">
@@ -248,6 +257,8 @@ function viewDashboard(){
         <div class="card"><h3>Team workload (Heijunka)</h3>${workload || '<span class="muted small">No team members</span>'}</div>
       </div>
     </div>
+    ${session.role==='admin'?`<div class="card" style="margin-top:16px"><div class="section-head"><div><h3>Task progress by team member</h3><p class="muted small">Includes project tasks and standalone tasks.</p></div></div><div class="list">${progressRows||'<span class="muted">No team members</span>'}</div></div>`:''}
+    ${session.role==='team'?`<div class="card" style="margin-top:16px"><div class="section-head"><div><h3>My task progress</h3><p class="muted small">Your project and standalone tasks.</p></div><div class="chips">${ownProgressSummary}</div></div><div class="list">${ownProgressRows||'<div class="empty">No tasks assigned to you</div>'}</div></div>`:''}
     <div class="card" style="margin-top:16px"><h3>Live activity (Gemba feed)</h3><div class="list">${feed||'<span class="muted">No activity yet</span>'}</div></div>
     ${dashboardCalendar(scope)}
   `;
@@ -327,6 +338,7 @@ function projectTaskRow(index, task=null){
       <div class="field"><label>Assign to <span class="req">*</span></label><select data-pt-owner><option value="">Select team member</option>${members.map(u=>`<option value="${u.id}" ${u.id===task?.ownerId?'selected':''}>${esc(u.name)} · ${esc(u.dept||'General')}</option>`).join('')}</select></div>
       <div class="field"><label>Priority</label><select data-pt-priority>${['low','med','high'].map(p=>`<option value="${p}" ${(task?.priority||'med')===p?'selected':''}>${p==='med'?'Medium':p[0].toUpperCase()+p.slice(1)}</option>`).join('')}</select></div>
     </div>
+    <div class="field"><label>Progress</label><select data-pt-progress>${taskProgressOptions(task?.progress)}</select></div>
     <div class="field"><label>Description</label><textarea data-pt-desc rows="2" placeholder="What needs to be done?">${esc(task?.desc||'')}</textarea></div>
     <div class="field project-task-attachments" style="margin-bottom:0"><label>Attachments</label><label class="attachment-upload"><input type="file" data-pt-files multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"><span>📎 Choose images, PDFs or documents</span></label><div class="hint">Up to 5 MB total per task.</div><div data-pt-file-list class="attachment-list"></div></div>
   </div>`;
@@ -391,7 +403,7 @@ function openProjectForm(projectId=null){
     const removedIds=projectTasks.filter(t=>!retainedIds.includes(t.id)).map(t=>t.id);
     S().tasks=S().tasks.filter(t=>!removedIds.includes(t.id));
     S().messages.forEach(m=>{if(removedIds.includes(m.taskId))m.taskId=null;});
-    rows.forEach(row=>{const owner=userById($('[data-pt-owner]',row).value);const existing=row.dataset.taskId?S().tasks.find(t=>t.id===row.dataset.taskId):null;const values={projectId:id,clientId,title:$('[data-pt-title]',row).value.trim(),desc:$('[data-pt-desc]',row).value.trim(),dept:owner.dept||'General',ownerId:owner.id,priority:$('[data-pt-priority]',row).value,dueDate:due,attachments:row._attachments||[]};if(existing)Object.assign(existing,values);else S().tasks.push({id:'t_'+Math.random().toString(36).slice(2,9),...values,status:'todo',createdAt:now,stageAt:now,recurring:null});});
+    rows.forEach(row=>{const owner=userById($('[data-pt-owner]',row).value);const existing=row.dataset.taskId?S().tasks.find(t=>t.id===row.dataset.taskId):null;const values={projectId:id,clientId,title:$('[data-pt-title]',row).value.trim(),desc:$('[data-pt-desc]',row).value.trim(),dept:owner.dept||'General',ownerId:owner.id,priority:$('[data-pt-priority]',row).value,progress:$('[data-pt-progress]',row).value,dueDate:due,attachments:row._attachments||[]};if(existing)Object.assign(existing,values);else S().tasks.push({id:'t_'+Math.random().toString(36).slice(2,9),...values,status:'todo',createdAt:now,stageAt:now,recurring:null});});
     try{await Store.save();logActivity(`Project "${name}" ${editing?'updated':'created'} with ${rows.length} assigned task${rows.length===1?'':'s'}`,'brief');close();go('projects');toast(editing?'✅ Project updated':'✅ Project and tasks created');}catch(error){await Store.load();render();toast(error.message);}
   };
 }
@@ -419,7 +431,7 @@ function andonRow(t){
 }
 function viewAndon(){
   const scope = session.role==='team' ? S().tasks.filter(t=>t.ownerId===session.id) : S().tasks;
-  const active = scope.filter(t=>ACTIVE.includes(t.status))
+  const active = scope.filter(t=>ACTIVE.includes(t.status) && t.progress!=='completed')
     .sort((a,b)=> elapsedMs(b)-elapsedMs(a));
   const {amberMin, redMin} = S().settings;
   const groups = {red:[],amber:[],green:[]};
@@ -911,24 +923,18 @@ function sendMessageRaw(clientId, taskId, text, voice){
 ============================================================ */
 function openTeamTaskForm(){
   if(session.role!=='team')return;
-  const clientOpts=S().clients.map(c=>`<option value="${c.id}">${esc(c.company)}</option>`).join('');
-  const projectOpts=(S().projects||[]).map(p=>`<option value="${p.id}" data-client-id="${p.clientId}">${esc(p.name)} · ${esc(clientById(p.clientId)?.company||'')}</option>`).join('');
+  const clientOpts=`<option value="">No client</option>`+S().clients.map(c=>`<option value="${c.id}">${esc(c.company)}</option>`).join('');
+  const projectOpts=`<option value="">No project</option>`+(S().projects||[]).map(p=>`<option value="${p.id}" data-client-id="${p.clientId||''}">${esc(p.name)}${p.clientId?` · ${esc(clientById(p.clientId)?.company||'No client')}`:''}</option>`).join('');
   const modal=document.createElement('div');modal.className='modal-scrim';
-  modal.innerHTML=`<div class="modal"><div class="modal-head"><div><h2>Add task</h2><p class="muted small">This task will be assigned to you automatically.</p></div><button class="btn-ghost" data-close>✕</button></div>
-    <div class="modal-body">
-      <div class="field"><label>Task title <span class="req">*</span></label><input id="team-task-title" placeholder="What needs to be done?"></div>
-      <div class="field"><label>Description</label><textarea id="team-task-desc" placeholder="Add task details"></textarea></div>
-      <div class="form-row"><div class="field"><label>Client <span class="req">*</span></label><select id="team-task-client">${clientOpts}</select></div><div class="field"><label>Project</label><select id="team-task-project"><option value="">Standalone task</option>${projectOpts}</select></div></div>
-      <div class="form-row"><div class="field"><label>Priority</label><select id="team-task-priority"><option value="low">Low</option><option value="med" selected>Medium</option><option value="high">High</option></select></div><div class="field"><label>Due date</label><input id="team-task-due" type="date"></div></div>
-      <div class="assignment-note">${avatar(session)}<div><b>Assigned to ${esc(session.name)}</b><span>${esc(session.dept)} department</span></div></div>
-    </div><div class="modal-foot"><button class="btn-ghost" data-close>Cancel</button><button class="btn" id="save-team-task">Create task</button></div></div>`;
+  modal.innerHTML=`<div class="modal project-modal"><div class="modal-head"><div><h2>Add task</h2><p class="muted small">Create a task with the same details used by the Tasks menu. It will be assigned to you.</p></div><button class="btn-ghost" data-close>✕</button></div><div class="modal-body"><div class="form-row"><div class="field"><label>Client</label><select id="team-task-client">${clientOpts}</select></div><div class="field"><label>Project</label><select id="team-task-project">${projectOpts}</select></div></div><div id="team-task-fields">${projectTaskRow(0)}</div></div><div class="modal-foot"><button class="btn-ghost" data-close>Cancel</button><button class="btn" id="save-team-task">Create task</button></div></div>`;
   $('#modal-host').appendChild(modal);const close=()=>modal.remove();modal.querySelectorAll('[data-close]').forEach(b=>b.onclick=close);modal.onclick=e=>{if(e.target===modal)close();};
+  const row=$('[data-project-task]',modal);$('[data-remove-project-task]',row)?.remove();const owner=$('[data-pt-owner]',row);owner.value=session.id;owner.disabled=true;bindProjectTaskFiles($('#team-task-fields',modal));
   $('#team-task-project',modal).onchange=e=>{const option=e.target.selectedOptions[0];if(option?.dataset.clientId)$('#team-task-client',modal).value=option.dataset.clientId;};
   $('#save-team-task',modal).onclick=async()=>{
-    const title=$('#team-task-title',modal).value.trim();if(!title){toast('Enter a task title');return;}
-    const now=Date.now(),due=$('#team-task-due',modal).value?new Date($('#team-task-due',modal).value).getTime():null;
+    const title=$('[data-pt-title]',row).value.trim();if(!title){toast('Enter a task title');return;}if(row._reading>0){toast('Please wait for attachments to finish loading');return;}
+    const now=Date.now();
     const projectId=$('#team-task-project',modal).value||null,linkedProject=projectById(projectId);
-    const task={id:'t_'+Math.random().toString(36).slice(2,9),projectId,clientId:linkedProject?.clientId||$('#team-task-client',modal).value,title,desc:$('#team-task-desc',modal).value.trim(),dept:session.dept,ownerId:session.id,status:'todo',priority:$('#team-task-priority',modal).value,createdAt:now,stageAt:now,dueDate:due,recurring:null,attachments:[]};
+    const task={id:'t_'+Math.random().toString(36).slice(2,9),projectId,clientId:linkedProject?.clientId||$('#team-task-client',modal).value||null,title,desc:$('[data-pt-desc]',row).value.trim(),dept:session.dept||'General',ownerId:session.id,status:'todo',priority:$('[data-pt-priority]',row).value,progress:$('[data-pt-progress]',row).value,createdAt:now,stageAt:now,dueDate:linkedProject?.dueDate||null,recurring:null,attachments:row._attachments||[]};
     S().tasks.push(task);try{await Store.save();logActivity(`${session.name} created "${title}" and assigned it to themselves`,'brief');close();render();buildNav();toast('✅ Task created and assigned to you');}catch(error){await Store.load();render();toast(error.message);}
   };
 }
@@ -957,7 +963,7 @@ function openTask(id, calendarReadOnly=false){
     <div class="form-row">
       <div class="field"><label>Priority</label><select id="m-prio">${['low','med','high'].map(p=>`<option ${t.priority===p?'selected':''}>${p}</option>`).join('')}</select></div>
       <div class="field"><label>${session.role==='admin'?'Department':'Due date'}</label>${session.role==='admin'?`<select id="m-dept">${DEPARTMENTS.map(d=>`<option ${t.dept===d?'selected':''}>${d}</option>`).join('')}</select>`:`<input id="m-due" type="date" value="${t.dueDate?new Date(t.dueDate).toISOString().slice(0,10):''}">`}</div>
-    </div>${session.role==='admin'?`<div class="field"><label>Due date</label><input id="m-due" type="date" value="${t.dueDate?new Date(t.dueDate).toISOString().slice(0,10):''}"></div>`:''}` : '';
+    </div><div class="field"><label>Progress</label><select id="m-progress">${taskProgressOptions(t.progress)}</select></div>${session.role==='admin'?`<div class="field"><label>Due date</label><input id="m-due" type="date" value="${t.dueDate?new Date(t.dueDate).toISOString().slice(0,10):''}"></div>`:''}` : '';
   const modal = document.createElement('div');
   modal.className='modal-scrim';
   modal.innerHTML = `<div class="modal">
@@ -993,7 +999,7 @@ function openTask(id, calendarReadOnly=false){
     if (ns!==t.status){ t.stageAt=Date.now(); logActivity(`${session.name} moved "${t.title}" to ${ns.replace('_',' ')}`,'move');
       if (ns==='done'&&c){ Notify.both({phone:c.phone,email:c.email,waText:`🎉 Good news ${c.name}! "${t.title}" is completed. Please review.`,emailText:`Subject: Completed — ${t.title}`}); }
     }
-    t.title=$('#m-title').value.trim();if(!t.title){toast('Task title is required');return;}t.desc=$('#m-desc').value.trim();t.status=ns;t.priority=$('#m-prio').value;
+    t.title=$('#m-title').value.trim();if(!t.title){toast('Task title is required');return;}t.desc=$('#m-desc').value.trim();t.status=ns;t.priority=$('#m-prio').value;t.progress=$('#m-progress').value;
     if(session.role==='admin'){const projectId=$('#m-project',modal).value||null,project=projectById(projectId);t.projectId=projectId;t.clientId=project?.clientId||$('#m-client',modal).value||null;t.ownerId=$('#m-owner').value||null;t.dept=$('#m-dept').value;t.dueDate=$('#m-due').value?new Date($('#m-due').value).getTime():null;}else{t.ownerId=session.id;t.dept=session.dept;t.dueDate=$('#m-due').value?new Date($('#m-due').value).getTime():null;}
     try{await Store.save();modal.remove();render();buildNav();toast('✅ Task updated');}catch(error){await Store.load();render();toast(error.message);}
   };
@@ -1013,7 +1019,7 @@ async function deleteTask(taskId,modal=null){
 ============================================================ */
 function viewTasks(){
   const all=S().tasks,pageSize=10,totalPages=Math.max(1,Math.ceil(all.length/pageSize));tasksPage=Math.min(Math.max(1,tasksPage),totalPages);
-  const rows=all.slice((tasksPage-1)*pageSize,tasksPage*pageSize).map(t=>{const client=clientById(t.clientId),project=projectById(t.projectId),owner=userById(t.ownerId);return `<div class="row-item" data-task="${t.id}" style="cursor:pointer"><div style="flex:1;min-width:0"><b style="font-size:14px">${esc(t.title)}</b><div class="muted small">${esc(client?.company||'No client')} · ${esc(project?.name||'No project')} · ${owner?esc(owner.name):'Unassigned'}</div></div><span class="prio ${t.priority}">${t.priority}</span><span class="status-pill st-${t.status}">${t.status.replace('_',' ')}</span><div class="member-actions"><button class="btn-ghost small" data-edit-task="${t.id}">✏️ Edit</button><button class="btn-ghost small btn-delete-client" data-delete-task="${t.id}">🗑️ Delete</button></div></div>`;}).join('');
+  const rows=all.slice((tasksPage-1)*pageSize,tasksPage*pageSize).map(t=>{const client=clientById(t.clientId),project=projectById(t.projectId),owner=userById(t.ownerId);return `<div class="row-item" data-task="${t.id}" style="cursor:pointer"><div style="flex:1;min-width:0"><b style="font-size:14px">${esc(t.title)}</b><div class="muted small">${esc(client?.company||'No client')} · ${esc(project?.name||'No project')} · ${owner?esc(owner.name):'Unassigned'}</div></div><span class="prio ${t.priority}">${t.priority}</span><span class="status-pill">${taskProgressLabel(t.progress)}</span><div class="member-actions"><button class="btn-ghost small" data-edit-task="${t.id}">✏️ Edit</button><button class="btn-ghost small btn-delete-client" data-delete-task="${t.id}">🗑️ Delete</button></div></div>`;}).join('');
   const pagination=totalPages>1?`<div class="section-head" style="margin-top:14px"><button class="btn-ghost small" data-tasks-page="${tasksPage-1}" ${tasksPage===1?'disabled':''}>← Previous</button><span class="muted small">Page ${tasksPage} of ${totalPages} · ${all.length} tasks</span><button class="btn-ghost small" data-tasks-page="${tasksPage+1}" ${tasksPage===totalPages?'disabled':''}>Next →</button></div>`:'';
   return `<div class="section-head"><p class="muted">Create and manage individual tasks across clients and projects.</p><button class="btn" data-new-task>+ New task</button></div><div class="list">${rows||'<div class="empty"><div class="e-ic">✅</div>No tasks yet</div>'}</div>${pagination}`;
 }
@@ -1026,7 +1032,7 @@ function openNewTask(){
   $('#modal-host').appendChild(modal);const close=()=>modal.remove();modal.querySelectorAll('[data-close]').forEach(b=>b.onclick=close);modal.onclick=e=>{if(e.target===modal)close();};
   const row=$('[data-project-task]',modal);$('[data-remove-project-task]',row)?.remove();bindProjectTaskFiles($('#new-task-fields',modal));
   $('#task-project',modal).onchange=e=>{const clientId=e.target.selectedOptions[0]?.dataset.clientId;if(clientId)$('#task-client',modal).value=clientId;};
-  $('#create-task',modal).onclick=async()=>{const title=$('[data-pt-title]',row).value.trim(),owner=userById($('[data-pt-owner]',row).value);if(!title){toast('Enter a task title');return;}if(!owner){toast('Select a team member');return;}if(row._reading>0){toast('Please wait for attachments to finish loading');return;}const projectId=$('#task-project',modal).value||null,project=projectById(projectId),clientId=project?.clientId||$('#task-client',modal).value||null,now=Date.now();S().tasks.push({id:'t_'+Math.random().toString(36).slice(2,9),projectId,clientId,title,desc:$('[data-pt-desc]',row).value.trim(),dept:owner.dept||'General',ownerId:owner.id,status:'todo',priority:$('[data-pt-priority]',row).value,createdAt:now,stageAt:now,dueDate:project?.dueDate||null,recurring:null,attachments:row._attachments||[]});try{await Store.save();close();go('tasks');toast('✅ Task created');}catch(error){await Store.load();render();toast(error.message);}};
+  $('#create-task',modal).onclick=async()=>{const title=$('[data-pt-title]',row).value.trim(),owner=userById($('[data-pt-owner]',row).value);if(!title){toast('Enter a task title');return;}if(!owner){toast('Select a team member');return;}if(row._reading>0){toast('Please wait for attachments to finish loading');return;}const projectId=$('#task-project',modal).value||null,project=projectById(projectId),clientId=project?.clientId||$('#task-client',modal).value||null,now=Date.now();S().tasks.push({id:'t_'+Math.random().toString(36).slice(2,9),projectId,clientId,title,desc:$('[data-pt-desc]',row).value.trim(),dept:owner.dept||'General',ownerId:owner.id,status:'todo',priority:$('[data-pt-priority]',row).value,progress:$('[data-pt-progress]',row).value,createdAt:now,stageAt:now,dueDate:project?.dueDate||null,recurring:null,attachments:row._attachments||[]});try{await Store.save();close();go('tasks');toast('✅ Task created');}catch(error){await Store.load();render();toast(error.message);}};
 }
 
 
