@@ -182,7 +182,7 @@ h1,h2,h3{font-weight:650;letter-spacing:-.01em}
 .project-progress>div:first-child{display:flex;justify-content:space-between;font-size:12px;margin-bottom:7px;color:var(--muted)}
 .project-progress b{font-size:12px;color:var(--ink)}
 .project-progress .bar i{background:var(--accent2)}
-.project-card-foot{display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--line);margin-top:16px;padding-top:14px;font-size:12px;color:var(--muted)}
+.project-card-foot{display:flex;align-items:center;justify-content:flex-end;border-top:1px solid var(--line);margin-top:16px;padding-top:14px;font-size:12px;color:var(--muted)}
 .project-card-foot .st-active{background:rgba(63,163,77,.14);color:var(--green)}
 .project-modal{width:min(790px,100%)}
 .project-modal .modal-head{align-items:flex-start}

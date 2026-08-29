@@ -322,7 +322,7 @@ function viewProjects(){
       <h3>${esc(p.name)}</h3>
       ${p.desc?`<p>${esc(p.desc)}</p>`:'<p class="muted">No project description</p>'}
       <div class="project-progress"><div><span>Progress</span><b>${complete}/${tasks.length} tasks</b></div><div class="bar"><i style="width:${progress}%"></i></div></div>
-      <div class="project-card-foot"><span>${p.dueDate?'📅 '+new Date(p.dueDate).toLocaleDateString():'No due date'}</span><span class="status-pill st-${p.status||'new'}">${esc(p.status||'active')}</span></div>
+      <div class="project-card-foot"><span class="status-pill st-${p.status||'new'}">${esc(p.status||'active')}</span></div>
     </div>`;
   }).join('');
   return `<div class="section-head"><p class="muted">Create a project and assign every task to a specific team member.</p><button class="btn" data-add-project>+ Add project</button></div>
@@ -338,7 +338,10 @@ function projectTaskRow(index, task=null){
       <div class="field"><label>Assign to <span class="req">*</span></label><select data-pt-owner><option value="">Select team member</option>${members.map(u=>`<option value="${u.id}" ${u.id===task?.ownerId?'selected':''}>${esc(u.name)} · ${esc(u.dept||'General')}</option>`).join('')}</select></div>
       <div class="field"><label>Priority</label><select data-pt-priority>${['low','med','high'].map(p=>`<option value="${p}" ${(task?.priority||'med')===p?'selected':''}>${p==='med'?'Medium':p[0].toUpperCase()+p.slice(1)}</option>`).join('')}</select></div>
     </div>
-    <div class="field"><label>Progress</label><select data-pt-progress>${taskProgressOptions(task?.progress)}</select></div>
+    <div class="form-row">
+      <div class="field"><label>Progress</label><select data-pt-progress>${taskProgressOptions(task?.progress)}</select></div>
+      <div class="field"><label>Due date</label><input data-pt-due type="date" value="${task?.dueDate?new Date(task.dueDate).toISOString().slice(0,10):''}"></div>
+    </div>
     <div class="field"><label>Description</label><textarea data-pt-desc rows="2" placeholder="What needs to be done?">${esc(task?.desc||'')}</textarea></div>
     <div class="field project-task-attachments" style="margin-bottom:0"><label>Attachments</label><label class="attachment-upload"><input type="file" data-pt-files multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"><span>📎 Choose images, PDFs or documents</span></label><div class="hint">Up to 5 MB total per task.</div><div data-pt-file-list class="attachment-list"></div></div>
   </div>`;
@@ -371,13 +374,11 @@ function openProjectForm(projectId=null){
   const project=projectById(projectId); const editing=!!project;
   const projectTasks=editing?S().tasks.filter(t=>t.projectId===project.id):[];
   const clientOpts=`<option value="" ${project?.clientId?'':'selected'}>No client</option>`+S().clients.map(c=>`<option value="${c.id}" ${c.id===project?.clientId?'selected':''}>${esc(c.company)}</option>`).join('');
-  const dueValue=project?.dueDate?new Date(project.dueDate).toISOString().slice(0,10):'';
   const modal=document.createElement('div'); modal.className='modal-scrim';
   modal.innerHTML=`<div class="modal project-modal"><div class="modal-head"><div><h2>${editing?'Edit project':'Create a new project'}</h2><p class="muted small">${editing?'Update project details, assignments, or add more tasks.':'Plan the work and assign ownership from the start.'}</p></div><button class="btn-ghost" data-close>✕</button></div>
     <div class="modal-body">
       <div class="project-form-section"><h3>Project details</h3><div class="form-row"><div class="field"><label>Project name <span class="req">*</span></label><input id="project-name" value="${esc(project?.name||'')}" placeholder="e.g. Website redesign"></div><div class="field"><label>Client</label><select id="project-client">${clientOpts}</select></div></div>
-      <div class="field"><label>Description</label><textarea id="project-desc" placeholder="Project scope and goals">${esc(project?.desc||'')}</textarea></div>
-      <div class="field"><label>Due date</label><input id="project-due" type="date" value="${dueValue}"></div></div>
+      <div class="field"><label>Description</label><textarea id="project-desc" placeholder="Project scope and goals">${esc(project?.desc||'')}</textarea></div></div>
       <div class="project-form-section"><div class="section-head"><div><h3>Task list</h3><p class="muted small">Every task must have one accountable team member.</p></div><button class="btn-2 small" type="button" id="add-project-task">+ Add task</button></div>
       <div id="project-task-list">${projectTasks.length?projectTasks.map((t,i)=>projectTaskRow(i,t)).join(''):projectTaskRow(0)}</div></div>
     </div><div class="modal-foot"><button class="btn-ghost" data-close>Cancel</button><button class="btn" id="save-project">${editing?'Save changes':'Create project'}</button></div></div>`;
@@ -396,14 +397,13 @@ function openProjectForm(projectId=null){
     const invalid=rows.some(row=>!$('[data-pt-title]',row).value.trim()||!$('[data-pt-owner]',row).value);
     if(invalid){toast('Every task needs a title and assigned team member');return;}
     const id=project?.id||'p_'+Math.random().toString(36).slice(2,9), clientId=$('#project-client',modal).value||null, now=Date.now();
-    const due=$('#project-due',modal).value?new Date($('#project-due',modal).value).getTime():null;
-    if(project) Object.assign(project,{clientId,name,desc:$('#project-desc',modal).value.trim(),dueDate:due});
-    else S().projects.push({id,clientId,name,desc:$('#project-desc',modal).value.trim(),status:'active',dueDate:due});
+    if(project) Object.assign(project,{clientId,name,desc:$('#project-desc',modal).value.trim(),dueDate:null});
+    else S().projects.push({id,clientId,name,desc:$('#project-desc',modal).value.trim(),status:'active'});
     const retainedIds=rows.map(row=>row.dataset.taskId).filter(Boolean);
     const removedIds=projectTasks.filter(t=>!retainedIds.includes(t.id)).map(t=>t.id);
     S().tasks=S().tasks.filter(t=>!removedIds.includes(t.id));
     S().messages.forEach(m=>{if(removedIds.includes(m.taskId))m.taskId=null;});
-    rows.forEach(row=>{const owner=userById($('[data-pt-owner]',row).value);const existing=row.dataset.taskId?S().tasks.find(t=>t.id===row.dataset.taskId):null;const values={projectId:id,clientId,title:$('[data-pt-title]',row).value.trim(),desc:$('[data-pt-desc]',row).value.trim(),dept:owner.dept||'General',ownerId:owner.id,priority:$('[data-pt-priority]',row).value,progress:$('[data-pt-progress]',row).value,dueDate:due,attachments:row._attachments||[]};if(existing)Object.assign(existing,values);else S().tasks.push({id:'t_'+Math.random().toString(36).slice(2,9),...values,status:'todo',createdAt:now,stageAt:now,recurring:null});});
+    rows.forEach(row=>{const owner=userById($('[data-pt-owner]',row).value);const existing=row.dataset.taskId?S().tasks.find(t=>t.id===row.dataset.taskId):null;const dueInput=$('[data-pt-due]',row).value;const values={projectId:id,clientId,title:$('[data-pt-title]',row).value.trim(),desc:$('[data-pt-desc]',row).value.trim(),dept:owner.dept||'General',ownerId:owner.id,priority:$('[data-pt-priority]',row).value,progress:$('[data-pt-progress]',row).value,dueDate:dueInput?new Date(dueInput).getTime():null,attachments:row._attachments||[]};if(existing)Object.assign(existing,values);else S().tasks.push({id:'t_'+Math.random().toString(36).slice(2,9),...values,status:'todo',createdAt:now,stageAt:now,recurring:null});});
     try{await Store.save();logActivity(`Project "${name}" ${editing?'updated':'created'} with ${rows.length} assigned task${rows.length===1?'':'s'}`,'brief');close();go('projects');toast(editing?'✅ Project updated':'✅ Project and tasks created');}catch(error){await Store.load();render();toast(error.message);}
   };
 }
@@ -934,7 +934,8 @@ function openTeamTaskForm(){
     const title=$('[data-pt-title]',row).value.trim();if(!title){toast('Enter a task title');return;}if(row._reading>0){toast('Please wait for attachments to finish loading');return;}
     const now=Date.now();
     const projectId=$('#team-task-project',modal).value||null,linkedProject=projectById(projectId);
-    const task={id:'t_'+Math.random().toString(36).slice(2,9),projectId,clientId:linkedProject?.clientId||$('#team-task-client',modal).value||null,title,desc:$('[data-pt-desc]',row).value.trim(),dept:session.dept||'General',ownerId:session.id,status:'todo',priority:$('[data-pt-priority]',row).value,progress:$('[data-pt-progress]',row).value,createdAt:now,stageAt:now,dueDate:linkedProject?.dueDate||null,recurring:null,attachments:row._attachments||[]};
+    const dueInput=$('[data-pt-due]',row).value;
+    const task={id:'t_'+Math.random().toString(36).slice(2,9),projectId,clientId:linkedProject?.clientId||$('#team-task-client',modal).value||null,title,desc:$('[data-pt-desc]',row).value.trim(),dept:session.dept||'General',ownerId:session.id,status:'todo',priority:$('[data-pt-priority]',row).value,progress:$('[data-pt-progress]',row).value,createdAt:now,stageAt:now,dueDate:dueInput?new Date(dueInput).getTime():null,recurring:null,attachments:row._attachments||[]};
     S().tasks.push(task);try{await Store.save();logActivity(`${session.name} created "${title}" and assigned it to themselves`,'brief');close();render();buildNav();toast('✅ Task created and assigned to you');}catch(error){await Store.load();render();toast(error.message);}
   };
 }
@@ -1032,7 +1033,7 @@ function openNewTask(){
   $('#modal-host').appendChild(modal);const close=()=>modal.remove();modal.querySelectorAll('[data-close]').forEach(b=>b.onclick=close);modal.onclick=e=>{if(e.target===modal)close();};
   const row=$('[data-project-task]',modal);$('[data-remove-project-task]',row)?.remove();bindProjectTaskFiles($('#new-task-fields',modal));
   $('#task-project',modal).onchange=e=>{const clientId=e.target.selectedOptions[0]?.dataset.clientId;if(clientId)$('#task-client',modal).value=clientId;};
-  $('#create-task',modal).onclick=async()=>{const title=$('[data-pt-title]',row).value.trim(),owner=userById($('[data-pt-owner]',row).value);if(!title){toast('Enter a task title');return;}if(!owner){toast('Select a team member');return;}if(row._reading>0){toast('Please wait for attachments to finish loading');return;}const projectId=$('#task-project',modal).value||null,project=projectById(projectId),clientId=project?.clientId||$('#task-client',modal).value||null,now=Date.now();S().tasks.push({id:'t_'+Math.random().toString(36).slice(2,9),projectId,clientId,title,desc:$('[data-pt-desc]',row).value.trim(),dept:owner.dept||'General',ownerId:owner.id,status:'todo',priority:$('[data-pt-priority]',row).value,progress:$('[data-pt-progress]',row).value,createdAt:now,stageAt:now,dueDate:project?.dueDate||null,recurring:null,attachments:row._attachments||[]});try{await Store.save();close();go('tasks');toast('✅ Task created');}catch(error){await Store.load();render();toast(error.message);}};
+  $('#create-task',modal).onclick=async()=>{const title=$('[data-pt-title]',row).value.trim(),owner=userById($('[data-pt-owner]',row).value);if(!title){toast('Enter a task title');return;}if(!owner){toast('Select a team member');return;}if(row._reading>0){toast('Please wait for attachments to finish loading');return;}const projectId=$('#task-project',modal).value||null,project=projectById(projectId),clientId=project?.clientId||$('#task-client',modal).value||null,now=Date.now(),dueInput=$('[data-pt-due]',row).value;S().tasks.push({id:'t_'+Math.random().toString(36).slice(2,9),projectId,clientId,title,desc:$('[data-pt-desc]',row).value.trim(),dept:owner.dept||'General',ownerId:owner.id,status:'todo',priority:$('[data-pt-priority]',row).value,progress:$('[data-pt-progress]',row).value,createdAt:now,stageAt:now,dueDate:dueInput?new Date(dueInput).getTime():null,recurring:null,attachments:row._attachments||[]});try{await Store.save();close();go('tasks');toast('✅ Task created');}catch(error){await Store.load();render();toast(error.message);}};
 }
 
 
