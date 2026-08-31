@@ -425,7 +425,7 @@ function kcard(t){
     <div class="kc-top">
       <span class="dep" style="background:${dc.bg};color:${dc.fg}">${t.dept}</span>
       ${ACTIVE.includes(t.status)?`<span class="light ${lvl}" title="${fmtElapsed(t)}"></span>`:''}
-      ${t.recurring?`<span title="repeats ${t.recurring}">🔁</span>`:''}
+      ${t.recurring?`<span title="repeats ${t.recurring.replaceAll('_',' ')}">🔁</span>`:''}
     </div>
     <b>${esc(t.title)}</b>
     <div class="kc-foot">
@@ -477,7 +477,7 @@ function viewClientFolder(){
     const owner=userById(t.ownerId); const lvl=andonLevel(t);
     return `<div class="row-item" data-task="${t.id}" style="cursor:pointer">
       ${ACTIVE.includes(t.status)?`<span class="light ${lvl}"></span>`:'<span style="width:11px"></span>'}
-      <div style="flex:1"><b style="font-size:14px">${esc(t.title)}</b><div class="muted small">${t.dept} · ${owner?esc(owner.name):'—'}${t.recurring?' · 🔁 '+t.recurring:''}</div></div>
+      <div style="flex:1"><b style="font-size:14px">${esc(t.title)}</b><div class="muted small">${t.dept} · ${owner?esc(owner.name):'—'}${t.recurring?' · 🔁 '+t.recurring.replaceAll('_',' '):''}</div></div>
       <span class="status-pill st-${t.status}">${t.status.replace('_',' ')}</span>
     </div>`;
   }).join('');
@@ -559,14 +559,16 @@ function viewRecurring(){
     const c=clientById(t.clientId), owner=userById(t.ownerId);
     return `<div class="row-item">
       <span style="font-size:16px">🔁</span>
-      <div style="flex:1"><b style="font-size:14px">${esc(t.title)}</b><div class="muted small">${esc(c?.company||'No client')} · ${t.dept} · ${owner?esc(owner.name):'—'}</div></div>
-      <span class="pill">${t.recurring}</span>
+      <div style="flex:1"><b style="font-size:14px">${esc(t.title)}</b><div class="muted small">${esc(c?.company||'No client')} · ${t.dept} · ${owner?esc(owner.name):'—'} · Due: ${t.dueDate?new Date(t.dueDate).toLocaleDateString():'No due date'}</div></div>
+      <span class="pill">${t.recurring.replaceAll('_',' ')}</span>
+      <span class="status-pill">${taskProgressLabel(t.progress)}</span>
       <span class="status-pill st-${t.status}">${t.status.replace('_',' ')}</span>
+      ${session.role==='admin'?`<div class="member-actions"><button class="btn-ghost small" data-edit-recurring="${t.id}">✏️ Edit</button><button class="btn-ghost small btn-delete-client" data-delete-recurring="${t.id}">🗑️ Delete</button></div>`:''}
     </div>`;
   }).join('');
   return `
-    <div class="section-head"><h2>Repeating tasks</h2><button class="btn small" data-new-recurring>+ New repeating task</button></div>
-    <p class="muted" style="margin-bottom:16px">These auto-create on schedule (daily / weekly / monthly) — e.g. weekly social posts, monthly reports.</p>
+    <div class="section-head"><h2>Repeating tasks</h2>${session.role==='admin'?'<button class="btn small" data-new-recurring>+ New repeating task</button>':''}</div>
+    <p class="muted" style="margin-bottom:16px">These auto-create on schedule (daily / alternate days / weekly / monthly) — e.g. weekly social posts, monthly reports.</p>
     <div class="list">${rows||'<div class="empty"><div class="e-ic">🔁</div>No repeating tasks yet</div>'}</div>`;
 }
 
@@ -898,7 +900,7 @@ function openTask(id){
         <span class="chip" style="cursor:default">📁 ${esc(c?.company||'No client')}</span>
         <span class="chip" style="cursor:default">${t.dept}</span>
         <span class="chip" style="cursor:default">⏱ ${ACTIVE.includes(t.status)?fmtElapsed(t)+' in stage':'—'}</span>
-        ${t.recurring?`<span class="chip" style="cursor:default">🔁 ${t.recurring}</span>`:''}
+        ${t.recurring?`<span class="chip" style="cursor:default">🔁 ${t.recurring.replaceAll('_',' ')}</span>`:''}
       </div>
       ${canManage?'':`<p style="margin-bottom:6px">${esc(t.desc)||'<span class="muted">No description</span>'}</p>`}
       ${renderTaskAttachments(t.attachments)}
@@ -961,32 +963,44 @@ function openNewTask(){
 /* ============================================================
    NEW RECURRING MODAL
 ============================================================ */
-function openNewRecurring(){
-  const clientOpts=`<option value="">No client</option>`+S().clients.map(c=>`<option value="${c.id}">${esc(c.company)}</option>`).join('');
-  const projectOpts=`<option value="">No project</option>`+(S().projects||[]).map(p=>`<option value="${p.id}" data-client-id="${p.clientId||''}">${esc(p.name)}${p.clientId?` · ${esc(clientById(p.clientId)?.company||'No client')}`:''}</option>`).join('');
-  const memberOpts=S().users.filter(u=>u.role==='team').map(u=>`<option value="${u.id}">${esc(u.name)} · ${esc(u.dept)}</option>`).join('');
+function openNewRecurring(taskId=null){
+  if(session.role!=='admin')return;
+  const task=taskId?S().tasks.find(t=>t.id===taskId&&t.recurring):null;if(taskId&&!task)return;
+  const editing=!!task;
+  const clientOpts=`<option value="">No client</option>`+S().clients.map(c=>`<option value="${c.id}" ${task?.clientId===c.id?'selected':''}>${esc(c.company)}</option>`).join('');
+  const projectOpts=`<option value="">No project</option>`+(S().projects||[]).map(p=>`<option value="${p.id}" data-client-id="${p.clientId||''}" ${task?.projectId===p.id?'selected':''}>${esc(p.name)}${p.clientId?` · ${esc(clientById(p.clientId)?.company||'No client')}`:''}</option>`).join('');
+  const memberOpts=S().users.filter(u=>u.role==='team').map(u=>`<option value="${u.id}" ${task?.ownerId===u.id?'selected':''}>${esc(u.name)} · ${esc(u.dept)}</option>`).join('');
   const modal=document.createElement('div'); modal.className='modal-scrim';
-  modal.innerHTML=`<div class="modal"><div class="modal-head"><h2>New repeating task</h2><button class="btn-ghost" data-close>✕</button></div>
+  modal.innerHTML=`<div class="modal"><div class="modal-head"><h2>${editing?'Edit':'New'} repeating task</h2><button class="btn-ghost" data-close>✕</button></div>
     <div class="modal-body">
-      <div class="field"><label>Title</label><input id="rc-title" placeholder="e.g. Weekly Instagram carousel"></div>
+      <div class="field"><label>Title</label><input id="rc-title" value="${esc(task?.title||'')}" placeholder="e.g. Weekly Instagram carousel"></div>
       <div class="form-row"><div class="field"><label>Client</label><select id="rc-client">${clientOpts}</select></div><div class="field"><label>Project</label><select id="rc-project">${projectOpts}</select></div></div>
       <div class="form-row">
         <div class="field"><label>Assign to</label><select id="rc-owner"><option value="">Select team member</option>${memberOpts}</select></div>
-        <div class="field"><label>Repeats</label><select id="rc-freq"><option>daily</option><option selected>weekly</option><option>monthly</option></select></div>
+        <div class="field"><label>Repeats</label><select id="rc-freq"><option value="daily" ${task?.recurring==='daily'?'selected':''}>Daily</option><option value="alternate_days" ${task?.recurring==='alternate_days'?'selected':''}>Alternate Days</option><option value="weekly" ${!task||task.recurring==='weekly'?'selected':''}>Weekly</option><option value="monthly" ${task?.recurring==='monthly'?'selected':''}>Monthly</option></select></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>Due date</label><input id="rc-due" type="date" value="${task?.dueDate?new Date(task.dueDate).toISOString().slice(0,10):''}"></div>
+        <div class="field"><label>Progress</label><select id="rc-progress">${taskProgressOptions(task?.progress)}</select></div>
       </div>
     </div>
-    <div class="modal-foot"><button class="btn-ghost" data-close>Cancel</button><button class="btn" id="rc-save">Create</button></div></div>`;
+    <div class="modal-foot">${editing?`<button class="btn-ghost btn-delete-task" data-delete-recurring="${task.id}">Delete</button>`:''}<button class="btn-ghost" data-close>Cancel</button><button class="btn" id="rc-save">${editing?'Save changes':'Create'}</button></div></div>`;
   $('#modal-host').appendChild(modal);
   modal.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>modal.remove());
   modal.onclick=e=>{if(e.target===modal)modal.remove();};
   $('#rc-project',modal).onchange=e=>{const clientId=e.target.selectedOptions[0]?.dataset.clientId;if(clientId)$('#rc-client',modal).value=clientId;};
-  $('#rc-save').onclick=()=>{
+  $('#rc-save').onclick=async()=>{
     const title=$('#rc-title').value.trim(); if(!title){toast('Add a title');return;}
     const owner=userById($('#rc-owner').value); if(!owner){toast('Select a team member');return;}
     const projectId=$('#rc-project',modal).value||null,project=projectById(projectId),clientId=project?.clientId||$('#rc-client',modal).value||null;
-    S().tasks.push({id:Math.random().toString(36).slice(2,9),projectId,clientId,title,desc:'Repeating task',dept:owner.dept||'General',ownerId:owner.id,status:'todo',priority:'med',createdAt:Date.now(),stageAt:Date.now(),dueDate:Date.now()+604800000,recurring:$('#rc-freq').value});
-    Store.save(); modal.remove(); render(); toast('🔁 Repeating task created');
+    const frequency=$('#rc-freq').value,now=Date.now();let nextRecurrenceAt=task?.nextRecurrenceAt;
+    if(!editing||frequency!==task.recurring||!nextRecurrenceAt){const nextDate=new Date(now);if(frequency==='monthly'){const day=nextDate.getDate();nextDate.setDate(1);nextDate.setMonth(nextDate.getMonth()+1);nextDate.setDate(Math.min(day,new Date(nextDate.getFullYear(),nextDate.getMonth()+1,0).getDate()));}else nextDate.setDate(nextDate.getDate()+({daily:1,alternate_days:2,weekly:7}[frequency]));nextRecurrenceAt=nextDate.getTime();}
+    const dueInput=$('#rc-due',modal).value;
+    const values={projectId,clientId,title,dept:owner.dept||'General',ownerId:owner.id,dueDate:dueInput?new Date(dueInput).getTime():null,progress:$('#rc-progress',modal).value,recurring:frequency,nextRecurrenceAt};
+    if(editing)Object.assign(task,values);else S().tasks.push({id:Math.random().toString(36).slice(2,9),...values,desc:'Repeating task',status:'todo',priority:'med',progress:'just_started',createdAt:now,stageAt:now});
+    try{await Store.save();modal.remove();render();toast(editing?'✅ Repeating task updated':'🔁 Repeating task created');}catch(error){await Store.load();render();toast(error.message);}
   };
+  const deleteBtn=modal.querySelector('[data-delete-recurring]');if(deleteBtn)deleteBtn.onclick=()=>deleteTask(task.id,modal);
 }
 
 /* ============================================================
@@ -1010,7 +1024,9 @@ function bindView(){
   });
   $$('[data-edit-project]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();openProjectForm(btn.dataset.editProject);});
   $$('[data-delete-project]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();deleteProject(btn.dataset.deleteProject);});
-  const nr=$('[data-new-recurring]'); if(nr) nr.onclick=openNewRecurring;
+  const nr=$('[data-new-recurring]'); if(nr) nr.onclick=()=>openNewRecurring();
+  $$('[data-edit-recurring]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();openNewRecurring(btn.dataset.editRecurring);});
+  $$('[data-delete-recurring]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();deleteTask(btn.dataset.deleteRecurring);});
   const nt=$('[data-new-task]'); if(nt) nt.onclick=openNewTask;
   $$('[data-edit-task]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();openTask(btn.dataset.editTask);});
   $$('[data-delete-task]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();deleteTask(btn.dataset.deleteTask);});
