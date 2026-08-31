@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="csrf-token" content="{{ csrf_token() }}" />
-  <title>Nagare — Agency Flow OS</title>
+  <title>Karya — Agency Flow OS</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}?v=15" />
 </head>
@@ -12,7 +12,7 @@
   <div id="login" class="login">
     <div>
       <div class="login-card">
-        <div class="brand"><div class="brand-mark">流</div><div><h1>Nagare</h1><p class="tag">Agency Flow OS · by Antrajaal</p></div></div>
+        <div class="brand"><img class="brand-logo" src="{{ asset('assets/images/antrajaal-logo.png') }}" alt="Antrajaal logo" /><div><h1>Karya</h1><p class="tag">Agency Flow OS · by Antrajaal</p></div></div>
         <p class="login-sub">Sign in with the email and password provided for your account.</p>
         <form id="login-form" class="login-form">
           <div class="field"><label for="login-email">Email address</label><input id="login-email" type="email" autocomplete="email" required placeholder="you@company.com" /></div>
@@ -27,7 +27,7 @@
 
   <div id="app" class="app hidden">
     <aside class="sidebar">
-      <div class="brand small"><div class="brand-mark">流</div><div><h1>Nagare</h1></div></div>
+      <div class="brand small"><img class="brand-logo" src="{{ asset('assets/images/antrajaal-logo.png') }}" alt="Antrajaal logo" /><div><h1>Karya</h1></div></div>
       <nav id="nav" class="nav"></nav>
       <div class="side-foot"><div id="whoami" class="whoami"></div><button id="logout" class="btn-ghost small">Sign out</button></div>
     </aside>

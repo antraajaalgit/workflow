@@ -1138,7 +1138,7 @@ function renderNotifs(){
     await Store.load();
   } catch (error) {
     session = null;
-    document.body.innerHTML = `<div style="padding:40px;font-family:sans-serif"><h2>Nagare could not connect to the server</h2><p>${esc(error.message)}</p></div>`;
+    document.body.innerHTML = `<div style="padding:40px;font-family:sans-serif"><h2>Karya could not connect to the server</h2><p>${esc(error.message)}</p></div>`;
     return;
   }
   renderLogin();

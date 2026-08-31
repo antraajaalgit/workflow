@@ -249,10 +249,10 @@ class StateController extends Controller
         $subject = $taskTitle ? "New message about {$taskTitle}" : 'New message from your Antrajaal team';
         $lines = ["Hello {$client->name},", '', "{$actor->name} from Antrajaal sent you a message:", ''];
         if (filled($data['text'] ?? null)) $lines[] = $data['text'];
-        if ($data['hasVoice'] ?? false) $lines[] = '[A voice note is available in Nagare.]';
-        if (!empty($data['attachmentNames'])) $lines[] = '[Attachments in Nagare: '.implode(', ', $data['attachmentNames']).']';
+        if ($data['hasVoice'] ?? false) $lines[] = '[A voice note is available in Karya.]';
+        if (!empty($data['attachmentNames'])) $lines[] = '[Attachments in Karya: '.implode(', ', $data['attachmentNames']).']';
         $lines[] = '';
-        $lines[] = 'Open Nagare to view the conversation and reply: '.url('/');
+        $lines[] = 'Open Karya to view the conversation and reply: '.url('/');
 
         try {
             Mail::mailer('chat_smtp')->raw(implode("\n", $lines), function ($message) use ($client, $subject) {
@@ -336,8 +336,8 @@ class StateController extends Controller
     {
         $role = $user['role'] === 'team' ? 'team member' : 'client';
         try {
-            Mail::raw("Hello {$user['name']},\n\nYour Nagare {$role} account is ready.\n\nEmail: {$user['email']}\nPassword: {$user['password']}\n\nSign in at: ".url('/'), function ($message) use ($user) {
-                $message->to($user['email'], $user['name'])->subject('Your Nagare login details');
+            Mail::raw("Hello {$user['name']},\n\nYour Karya {$role} account is ready.\n\nEmail: {$user['email']}\nPassword: {$user['password']}\n\nSign in at: ".url('/'), function ($message) use ($user) {
+                $message->to($user['email'], $user['name'])->subject('Your Karya login details');
             });
             return true;
         } catch (\Throwable $exception) {

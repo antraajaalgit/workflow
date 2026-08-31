@@ -280,7 +280,7 @@ function dashboardCalendar(tasks){
   return `<section class="calendar-card" id="dashboard-calendar">
     <div class="calendar-head"><div><div class="calendar-eyebrow">Schedule</div><h2>Calendar</h2><p>Task deadlines and events from your Google Calendar.</p></div>
       <div class="calendar-actions"><div class="calendar-nav"><button data-cal-prev aria-label="Previous month">←</button><button data-cal-today>Today</button><button data-cal-next aria-label="Next month">→</button></div><div id="google-calendar-action">${googleCalendarConnected===true?'<button class="btn-ghost small" data-google-disconnect>Disconnect Google</button>':googleCalendarConnected===false?'<a class="btn google-connect" href="/api/google-calendar/connect">Connect Google Calendar</a>':'<span class="muted small">Checking Google Calendar…</span>'}</div></div></div>
-    <div class="calendar-title">${first.toLocaleDateString([], {month:'long',year:'numeric'})}<div class="calendar-legend"><span><i class="task-dot"></i>Nagare task</span><span><i class="google-dot"></i>Google event</span></div></div>
+    <div class="calendar-title">${first.toLocaleDateString([], {month:'long',year:'numeric'})}<div class="calendar-legend"><span><i class="task-dot"></i>Karya task</span><span><i class="google-dot"></i>Google event</span></div></div>
     <div class="calendar-weekdays">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div>${d}</div>`).join('')}</div><div class="calendar-grid">${days}</div>
   </section>`;
 }
@@ -1225,7 +1225,7 @@ function renderNotifs(){
     if(saved.userId){await Store.load();session=userById(saved.userId);$('#login').classList.add('hidden');$('#app').classList.remove('hidden');route=session.role==='client'?'my-requests':'dashboard';buildNav();renderWho();updateBell();render();}
   } catch (error) {
     session = null;
-    document.body.innerHTML = `<div style="padding:40px;font-family:sans-serif"><h2>Nagare could not connect to the server</h2><p>${esc(error.message)}</p></div>`;
+    document.body.innerHTML = `<div style="padding:40px;font-family:sans-serif"><h2>Karya could not connect to the server</h2><p>${esc(error.message)}</p></div>`;
     return;
   }
 })();

@@ -25,7 +25,7 @@ return [
     ],
     'chat_from' => [
         'address' => env('CHAT_MAIL_FROM_ADDRESS', env('CHAT_MAIL_USERNAME', 'hello@antraajaal.com')),
-        'name' => env('CHAT_MAIL_FROM_NAME', 'Nagare by Antrajaal'),
+        'name' => env('CHAT_MAIL_FROM_NAME', 'Karya by Antrajaal'),
     ],
-    'from' => ['address' => env('MAIL_FROM_ADDRESS', 'hello@antraajaal.com'), 'name' => env('MAIL_FROM_NAME', 'Nagare by Antrajaal')],
+    'from' => ['address' => env('MAIL_FROM_ADDRESS', 'hello@antraajaal.com'), 'name' => env('MAIL_FROM_NAME', 'Karya by Antrajaal')],
 ];
