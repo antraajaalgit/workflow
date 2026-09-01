@@ -34,6 +34,12 @@ function timeAgo(ts) {
   return Math.floor(h/24)+'d ago';
 }
 function clockTime(ts){ return new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); }
+function dueCountdown(dueDate){
+  const remaining=dueDate-Date.now(),totalMinutes=Math.floor(Math.abs(remaining)/60000);
+  if(totalMinutes<1)return remaining>=0?'Less than 1 min remaining in submitting task':'Less than 1 min overdue for submitting task';
+  const days=Math.floor(totalMinutes/1440),hours=Math.floor(totalMinutes%1440/60),minutes=totalMinutes%60;
+  return `${days} day${days===1?'':'s'} ${hours} hrs ${minutes} mins ${remaining>=0?'remaining in submitting task':'overdue for submitting task'}`;
+}
 
 /* ---------- ANDON ---------- */
 const ACTIVE = ['new','todo','in_progress','review'];
@@ -435,11 +441,11 @@ const COLS = [
 const WIP = {in_progress:4, review:3};
 function kcard(t){
   const owner = userById(t.ownerId);
-  const dc = DEPT_COLOR[t.dept];
+  const dc = DEPT_COLOR[t.dept] || {bg:'#f1eee8', fg:'#6b6258'};
   const lvl = andonLevel(t);
   return `<div class="kcard" data-task="${t.id}">
     <div class="kc-top">
-      <span class="dep" style="background:${dc.bg};color:${dc.fg}">${t.dept}</span>
+      <span class="dep" style="background:${dc.bg};color:${dc.fg}">${esc(t.dept || 'General')}</span>
       ${ACTIVE.includes(t.status)?`<span class="light ${lvl}" title="${fmtElapsed(t)}"></span>`:''}
       ${t.recurring?`<span title="repeats ${t.recurring.replaceAll('_',' ')}">🔁</span>`:''}
     </div>
@@ -964,6 +970,7 @@ function viewTasks(){
     <div class="project-client">${esc(client?.company||'No client')}</div><h3>${esc(t.title)}</h3>
     <div class="task-project"><span>📌</span><div><small>Project</small><b>${esc(project?.name||'Standalone task')}</b></div></div>
     <p>${esc(t.desc||'No task description')}</p>
+    ${t.dueDate&&!completed?`<div class="task-due-countdown ${t.dueDate<Date.now()?'overdue':''}" data-due-countdown="${t.dueDate}">⏳ ${dueCountdown(t.dueDate)}</div>`:''}
     <div class="task-card-foot"><span>${owner?avatar(owner):''}<span><small>Assigned to</small><b>${owner?esc(owner.name):'Unassigned'}</b></span></span>${t.dueDate?`<time><small>Due</small><b>${new Date(t.dueDate).toLocaleDateString()}</b></time>`:''}</div>
   </article>`;}).join('');
   const pagination=totalPages>1?`<div class="section-head" style="margin-top:14px"><button class="btn-ghost small" data-tasks-page="${tasksPage-1}" ${tasksPage===1?'disabled':''}>← Previous</button><span class="muted small">Page ${tasksPage} of ${totalPages} · ${all.length} tasks</span><button class="btn-ghost small" data-tasks-page="${tasksPage+1}" ${tasksPage===totalPages?'disabled':''}>Next →</button></div>`:'';
@@ -1131,6 +1138,7 @@ function bindComposer(root){
 ============================================================ */
 setInterval(()=>{
   if (!session) return;
+  $$('[data-due-countdown]').forEach(el=>{const dueDate=Number(el.dataset.dueCountdown);el.textContent='⏳ '+dueCountdown(dueDate);el.classList.toggle('overdue',dueDate<Date.now());});
   $$('[data-timer]').forEach(el=>{
     const t=S().tasks.find(x=>x.id===el.dataset.timer); if(!t)return;
     el.textContent=fmtElapsed(t);

@@ -51,6 +51,12 @@ function timeAgo(ts) {
 }
 function clockTime(ts){ return new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); }
 const dateKey = value => { const d=value instanceof Date?value:new Date(value); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+function dueCountdown(dueDate){
+  const remaining=dueDate-Date.now(),totalMinutes=Math.floor(Math.abs(remaining)/60000);
+  if(totalMinutes<1)return remaining>=0?'Less than 1 min remaining in submitting task':'Less than 1 min overdue for submitting task';
+  const days=Math.floor(totalMinutes/1440),hours=Math.floor(totalMinutes%1440/60),minutes=totalMinutes%60;
+  return `${days} day${days===1?'':'s'} ${hours} hrs ${minutes} mins ${remaining>=0?'remaining in submitting task':'overdue for submitting task'}`;
+}
 
 /* ---------- ANDON ---------- */
 const ACTIVE = ['new','todo','in_progress','review'];
@@ -305,7 +311,7 @@ async function bindDashboardCalendar(){
   $('[data-cal-prev]')?.addEventListener('click',()=>{calendarCursor=new Date(calendarCursor.getFullYear(),calendarCursor.getMonth()-1,1);render();});
   $('[data-cal-next]')?.addEventListener('click',()=>{calendarCursor=new Date(calendarCursor.getFullYear(),calendarCursor.getMonth()+1,1);render();});
   $('[data-cal-today]')?.addEventListener('click',()=>{calendarCursor=new Date(new Date().getFullYear(),new Date().getMonth(),1);render();});
-  $$('[data-calendar-task]').forEach(button=>button.onclick=()=>openTask(button.dataset.calendarTask,session.role==='team'));
+  $$('[data-calendar-task]').forEach(button=>button.onclick=()=>openTask(button.dataset.calendarTask));
   $('[data-google-disconnect]')?.addEventListener('click',async()=>{await Store.disconnectGoogleCalendar();googleCalendarConnected=false;googleCalendarEvents=[];googleCalendarRange=null;render();toast('Google Calendar disconnected');});
   if(googleCalendarConnected===null){try{googleCalendarConnected=(await Store.googleCalendarStatus()).connected;}catch(_){googleCalendarConnected=false;}render();return;}
   if(googleCalendarConnected){
@@ -476,11 +482,11 @@ const COLS = [
 const WIP = {in_progress:4, review:3};
 function kcard(t){
   const owner = userById(t.ownerId);
-  const dc = DEPT_COLOR[t.dept];
+  const dc = DEPT_COLOR[t.dept] || {bg:'#f1eee8', fg:'#6b6258'};
   const lvl = andonLevel(t);
   return `<div class="kcard" data-task="${t.id}">
     <div class="kc-top">
-      <span class="dep" style="background:${dc.bg};color:${dc.fg}">${t.dept}</span>
+      <span class="dep" style="background:${dc.bg};color:${dc.fg}">${esc(t.dept || 'General')}</span>
       ${ACTIVE.includes(t.status)?`<span class="light ${lvl}" title="${fmtElapsed(t)}"></span>`:''}
       ${t.recurring?`<span title="repeats ${t.recurring.replaceAll('_',' ')}">🔁</span>`:''}
     </div>
@@ -961,10 +967,10 @@ function openTeamTaskForm(){
 /* ============================================================
    TASK MODAL
 ============================================================ */
-function openTask(id, calendarReadOnly=false){
+function openTask(id){
   const t = S().tasks.find(x=>x.id===id); if(!t) return;
   const c=clientById(t.clientId);
-  const canManage = session.role==='admin' || (!calendarReadOnly && session.role==='team' && t.ownerId===session.id);
+  const canManage = session.role==='admin' || (session.role==='team' && t.ownerId===session.id);
   const msgs = S().messages.filter(m=>m.taskId===t.id).sort((a,b)=>a.at-b.at);
   const teamOpts = `<option value="">Unassigned</option>`+assignableStaff().map(u=>`<option value="${u.id}" ${u.id===t.ownerId?'selected':''}>${assigneeLabel(u)}</option>`).join('');
   const clientOpts=`<option value="" ${t.clientId?'':'selected'}>No client</option>`+S().clients.map(client=>`<option value="${client.id}" ${client.id===t.clientId?'selected':''}>${esc(client.company)}</option>`).join('');
@@ -1043,6 +1049,7 @@ function viewTasks(){
     <div class="project-client">${esc(client?.company||'No client')}</div><h3>${esc(t.title)}</h3>
     <div class="task-project"><span>📌</span><div><small>Project</small><b>${esc(project?.name||'Standalone task')}</b></div></div>
     <p>${esc(t.desc||'No task description')}</p>
+    ${t.dueDate&&!completed?`<div class="task-due-countdown ${t.dueDate<Date.now()?'overdue':''}" data-due-countdown="${t.dueDate}">⏳ ${dueCountdown(t.dueDate)}</div>`:''}
     <div class="task-card-foot"><span>${owner?avatar(owner):''}<span><small>Assigned to</small><b>${owner?esc(owner.name):'Unassigned'}</b></span></span>${t.dueDate?`<time><small>Due</small><b>${new Date(t.dueDate).toLocaleDateString()}</b></time>`:''}</div>
   </article>`;}).join('');
   const pagination=totalPages>1?`<div class="section-head" style="margin-top:14px"><button class="btn-ghost small" data-tasks-page="${tasksPage-1}" ${tasksPage===1?'disabled':''}>← Previous</button><span class="muted small">Page ${tasksPage} of ${totalPages} · ${all.length} tasks</span><button class="btn-ghost small" data-tasks-page="${tasksPage+1}" ${tasksPage===totalPages?'disabled':''}>Next →</button></div>`:'';
@@ -1216,6 +1223,7 @@ function bindComposer(root){
 ============================================================ */
 setInterval(()=>{
   if (!session) return;
+  $$('[data-due-countdown]').forEach(el=>{const dueDate=Number(el.dataset.dueCountdown);el.textContent='⏳ '+dueCountdown(dueDate);el.classList.toggle('overdue',dueDate<Date.now());});
   $$('[data-timer]').forEach(el=>{
     const t=S().tasks.find(x=>x.id===el.dataset.timer); if(!t)return;
     el.textContent=fmtElapsed(t);
