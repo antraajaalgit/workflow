@@ -144,7 +144,20 @@ h1,h2,h3{font-weight:650;letter-spacing:-.01em}
 .task-complete-btn:hover{background:var(--green);color:#fff;transform:translateY(-1px)}
 .task-complete-btn.is-completed{background:var(--green);border-color:var(--green);color:#fff;cursor:default;transform:none}
 .task-row-completed{background:rgba(63,163,77,.035)}
-.task-row-completed b{text-decoration:line-through;color:var(--muted)}
+.row-item.task-row-completed b{text-decoration:line-through;color:var(--muted)}
+.task-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(275px,1fr));gap:16px}
+.task-card{position:relative;min-height:310px;padding:18px;background:var(--panel);border:1px solid var(--line);border-radius:16px;display:flex;flex-direction:column;cursor:pointer;transition:.18s}
+.task-card:hover{transform:translateY(-2px);border-color:var(--accent2);box-shadow:var(--shadow)}
+.task-card-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
+.task-card h3{font-size:17px;line-height:1.35;margin-bottom:14px;overflow-wrap:anywhere}
+.task-card>p{color:var(--muted);font-size:12px;line-height:1.5;margin:14px 0 18px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.task-project{display:flex;align-items:center;gap:10px;padding:10px 11px;border:1px solid var(--line);border-radius:11px;background:var(--bg)}
+.task-project>span{font-size:18px}.task-project div{min-width:0}.task-project small,.task-project b{display:block}.task-project small{color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.07em}.task-project b{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.task-card-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:auto;padding-top:14px;border-top:1px solid var(--line)}
+.task-card-foot>span{display:flex;align-items:center;gap:8px;min-width:0}.task-card-foot .avatar{width:30px;height:30px;font-size:10px}.task-card-foot small,.task-card-foot b{display:block}.task-card-foot small{color:var(--muted);font-size:9px}.task-card-foot b{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.task-card-foot time{text-align:right;flex:none}
+.task-card .project-menu button:disabled{color:var(--green);cursor:default;background:rgba(63,163,77,.08)}
+.task-card.task-row-completed{background:rgba(63,163,77,.035)}
+.task-card.task-row-completed h3{text-decoration:line-through;color:var(--muted)}
 .tag-dep{font-size:11px;font-weight:600;padding:3px 9px;border-radius:7px}
 .status-pill{font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;text-transform:capitalize}
 .st-new{background:rgba(58,110,165,.13);color:var(--blue)}

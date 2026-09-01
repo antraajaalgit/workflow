@@ -271,10 +271,8 @@ function viewDashboard(){
         <div class="card"><div class="section-head"><div><h3>My Tasks</h3><p class="muted small">Tasks assigned directly to ${esc(session.name)}.</p></div><span class="chip" style="cursor:default">${adminTasks.length} task${adminTasks.length===1?'':'s'}</span></div><div class="list">${adminTaskRows||'<div class="empty"><div class="e-ic">✅</div>No tasks are assigned to you</div>'}</div></div>
         <div class="card"><h3>Team workload (Heijunka)</h3>${workload || '<span class="muted small">No team members</span>'}</div>
       </div>`:`
-      <div class="grid" style="grid-template-columns:1.4fr 1fr">
-        <div class="card"><div class="section-head"><h2>🚦 Andon — needs attention now</h2><button class="btn-ghost small" data-go="andon">View all →</button></div>${redRows}</div>
-        <div class="card"><h3>Team workload (Heijunka)</h3>${workload || '<span class="muted small">No team members</span>'}</div>
-      </div>`}
+      <div class="card"><div class="section-head"><h2>🚦 Andon — needs attention now</h2><button class="btn-ghost small" data-go="andon">View all →</button></div>${redRows}</div>
+      <div class="card" style="margin-top:16px"><h3>Team workload (Heijunka)</h3>${workload || '<span class="muted small">No team members</span>'}</div>`}
     ${session.role==='admin'?`<div class="card" style="margin-top:16px"><div class="section-head"><div><h3>Task progress by team member</h3><p class="muted small">Includes project tasks and standalone tasks.</p></div></div><div class="list">${progressRows||'<span class="muted">No team members</span>'}</div></div>`:''}
     ${session.role==='team'?`<div class="card" style="margin-top:16px"><div class="section-head"><div><h3>My task progress</h3><p class="muted small">Your project and standalone tasks.</p></div><div class="chips">${ownProgressSummary}</div></div><div class="list">${ownProgressRows||'<div class="empty">No tasks assigned to you</div>'}</div></div>`:''}
     <div class="card" style="margin-top:16px"><h3>Live activity (Gemba feed)</h3><div class="list">${feed||'<span class="muted">No activity yet</span>'}</div></div>
@@ -1040,9 +1038,15 @@ async function deleteTask(taskId,modal=null){
 ============================================================ */
 function viewTasks(){
   const all=session.role==='team'?S().tasks.filter(t=>t.ownerId===session.id):S().tasks,pageSize=10,totalPages=Math.max(1,Math.ceil(all.length/pageSize));tasksPage=Math.min(Math.max(1,tasksPage),totalPages);
-  const rows=all.slice((tasksPage-1)*pageSize,tasksPage*pageSize).map(t=>{const client=clientById(t.clientId),project=projectById(t.projectId),owner=userById(t.ownerId),completed=t.status==='done'||t.progress==='completed';return `<div class="row-item ${completed?'task-row-completed':''}" data-task="${t.id}" style="cursor:pointer"><div style="flex:1;min-width:0"><b style="font-size:14px">${esc(t.title)}</b><div class="muted small">${esc(client?.company||'No client')} · ${esc(project?.name||'No project')} · ${owner?esc(owner.name):'Unassigned'}</div></div><button class="task-complete-btn ${completed?'is-completed':''}" data-complete-task="${t.id}" ${completed?'disabled':''}>${completed?'✓ Completed':'Completed'}</button><span class="status-pill">${taskProgressLabel(t.progress)}</span><div class="member-actions"><button class="btn-ghost small" data-edit-task="${t.id}">✏️ Edit</button><button class="btn-ghost small btn-delete-client" data-delete-task="${t.id}">🗑️ Delete</button></div></div>`;}).join('');
+  const cards=all.slice((tasksPage-1)*pageSize,tasksPage*pageSize).map(t=>{const client=clientById(t.clientId),project=projectById(t.projectId),owner=userById(t.ownerId),completed=t.status==='done'||t.progress==='completed';return `<article class="task-card ${completed?'task-row-completed':''}" data-task="${t.id}">
+    <div class="task-card-head"><span class="status-pill">${taskProgressLabel(t.progress)}</span><div class="project-actions"><button class="project-menu-btn" data-task-menu="${t.id}" aria-label="Task actions" aria-expanded="false">⋮</button><div class="project-menu hidden" data-task-menu-popup="${t.id}">${completed?'<button disabled><span>✓</span>Completed</button>':`<button data-complete-task="${t.id}"><span>✓</span>Mark completed</button>`}<button data-edit-task="${t.id}"><span>✏️</span>Edit task</button><button class="danger" data-delete-task="${t.id}"><span>🗑️</span>Delete task</button></div></div></div>
+    <div class="project-client">${esc(client?.company||'No client')}</div><h3>${esc(t.title)}</h3>
+    <div class="task-project"><span>📌</span><div><small>Project</small><b>${esc(project?.name||'Standalone task')}</b></div></div>
+    <p>${esc(t.desc||'No task description')}</p>
+    <div class="task-card-foot"><span>${owner?avatar(owner):''}<span><small>Assigned to</small><b>${owner?esc(owner.name):'Unassigned'}</b></span></span>${t.dueDate?`<time><small>Due</small><b>${new Date(t.dueDate).toLocaleDateString()}</b></time>`:''}</div>
+  </article>`;}).join('');
   const pagination=totalPages>1?`<div class="section-head" style="margin-top:14px"><button class="btn-ghost small" data-tasks-page="${tasksPage-1}" ${tasksPage===1?'disabled':''}>← Previous</button><span class="muted small">Page ${tasksPage} of ${totalPages} · ${all.length} tasks</span><button class="btn-ghost small" data-tasks-page="${tasksPage+1}" ${tasksPage===totalPages?'disabled':''}>Next →</button></div>`:'';
-  return `<div class="section-head"><p class="muted">${session.role==='team'?'View and complete tasks assigned to you.':'Create and manage individual tasks across clients and projects.'}</p><button class="btn" ${session.role==='team'?'data-add-team-task':'data-new-task'}>+ New task</button></div><div class="list">${rows||'<div class="empty"><div class="e-ic">✅</div>No tasks yet</div>'}</div>${pagination}`;
+  return `<div class="section-head"><p class="muted">${session.role==='team'?'View and complete tasks assigned to you.':'Create and manage individual tasks across clients and projects.'}</p><button class="btn" ${session.role==='team'?'data-add-team-task':'data-new-task'}>+ New task</button></div><div class="task-card-grid">${cards||'<div class="empty"><div class="e-ic">✅</div>No tasks yet</div>'}</div>${pagination}`;
 }
 
 async function completeTask(taskId){
@@ -1134,6 +1138,7 @@ function bindView(){
   $$('[data-edit-recurring]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();openNewRecurring(btn.dataset.editRecurring);});
   $$('[data-delete-recurring]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();deleteTask(btn.dataset.deleteRecurring);});
   const nt=$('[data-new-task]'); if(nt) nt.onclick=openNewTask;
+  $$('[data-task-menu]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();const popup=$(`[data-task-menu-popup="${btn.dataset.taskMenu}"]`);$$('.project-menu').forEach(menu=>{if(menu!==popup)menu.classList.add('hidden');});popup.classList.toggle('hidden');btn.setAttribute('aria-expanded',String(!popup.classList.contains('hidden')));});
   $$('[data-complete-task]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();completeTask(btn.dataset.completeTask);});
   $$('[data-edit-task]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();openTask(btn.dataset.editTask);});
   $$('[data-delete-task]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();deleteTask(btn.dataset.deleteTask);});

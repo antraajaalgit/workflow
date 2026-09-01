@@ -6,7 +6,7 @@
   <meta name="csrf-token" content="{{ csrf_token() }}" />
   <title>Karya — Agency Flow OS</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}?v=20" />
+  <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}?v=21" />
 </head>
 <body>
   <div id="login" class="login">
@@ -38,6 +38,6 @@
   <div id="scrim" class="scrim hidden"></div>
   <div id="modal-host"></div>
   <script src="{{ asset('assets/js/store.js') }}?v=11"></script>
-  <script src="{{ asset('assets/js/app.js') }}?v=34"></script>
+  <script src="{{ asset('assets/js/app.js') }}?v=36"></script>
 </body>
 </html>
