@@ -25,7 +25,9 @@ const uid = () => Math.random().toString(36).slice(2, 9);
 
 function seed() {
   const team = [
-    { id:'u_admin', name:'You (Owner)', role:'admin', dept:null, color:'#7a5c3e' },
+    { id:'u_admin_sales', name:'Sales Admin', role:'admin', dept:null, color:'#7a5c3e' },
+    { id:'u_admin_ceo', name:'CEO Admin', role:'admin', dept:null, color:'#c9a25f' },
+    { id:'u_admin_agam', name:'Agam Bahri', role:'admin', dept:null, color:'#3a6ea5' },
     { id:'u_riya',  name:'Riya Kapoor', role:'team', dept:'Design', color:'#c9a25f' },
     { id:'u_arjun', name:'Arjun Mehta', role:'team', dept:'Development', color:'#3a6ea5' },
     { id:'u_sara',  name:'Sara Khan',   role:'team', dept:'Content', color:'#3fa34d' },

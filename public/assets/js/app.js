@@ -15,6 +15,8 @@ let googleCalendarRange = null;
 /* ---------- utils ---------- */
 const esc = (s='') => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const userById = id => S().users.find(u => u.id === id);
+const assignableStaff = () => S().users.filter(u => u.role === 'team' || (u.role === 'admin' && u.email));
+const assigneeLabel = u => `${esc(u.name)} · ${u.role === 'admin' ? 'Admin' : esc(u.dept || 'Team')}`;
 const clientById = id => S().clients.find(c => c.id === id);
 const projectById = id => (S().projects || []).find(p => p.id === id);
 const tasksOf = cid => S().tasks.filter(t => t.clientId === cid);
@@ -157,6 +159,7 @@ const NAV = {
   ],
   team: [
     {id:'dashboard', ic:'📊', label:'My Dashboard'},
+    {id:'tasks', ic:'✅', label:'Tasks'},
     {id:'kanban', ic:'🗂️', label:'Kanban'},
     {id:'andon', ic:'🚦', label:'Andon Board'},
     {id:'inbox', ic:'💬', label:'Inbox'},
@@ -210,10 +213,19 @@ function viewDashboard(){
 
   const kpi = (val,lab,sub='',subcolor='') => `<div class="kpi"><div class="k-val">${val}</div><div class="k-lab">${lab}</div>${sub?`<div class="k-sub" style="color:${subcolor}">${sub}</div>`:''}</div>`;
 
+  const andonProjectCard=(project,tasks)=>{const projectTasks=project?S().tasks.filter(t=>t.projectId===project.id):tasks,complete=projectTasks.filter(t=>t.status==='done'||t.progress==='completed').length,progress=projectTasks.length?Math.round(complete/projectTasks.length*100):0,client=project?clientById(project.clientId):null;return `<div class="project-card andon-project-card">
+    <div class="project-card-head"><div class="project-icon">🚦</div><span class="andon-count">${tasks.length} red</span></div>
+    <div class="project-client">${project?esc(client?.company||'No client'):'Unassigned project'}</div>
+    <h3>${project?esc(project.name):'Standalone tasks'}</h3>
+    <p>${project?esc(project.desc||'Tasks in this project need immediate attention.'):'Tasks requiring attention that are not linked to a project.'}</p>
+    <div class="andon-card-tasks">${tasks.map(t=>{const owner=userById(t.ownerId);return `<button class="andon-task-link" data-task="${t.id}"><span class="light red"></span><span><b>${esc(t.title)}</b><small>${owner?esc(owner.name):'Unassigned'} · ${fmtElapsed(t)}</small></span><span aria-hidden="true">→</span></button>`;}).join('')}</div>
+    <div class="project-progress"><div><span>Project progress</span><b>${complete}/${projectTasks.length} tasks</b></div><div class="bar"><i style="width:${progress}%"></i></div></div>
+    <div class="project-card-foot"><span class="status-pill andon-alert">Needs attention</span></div>
+  </div>`;};
   const projectIds=[...new Set(red.map(t=>t.projectId).filter(id=>projectById(id)))];
-  const groupedRed=projectIds.map(projectId=>{const project=projectById(projectId),tasks=red.filter(t=>t.projectId===projectId);return `<div style="margin-bottom:16px"><div class="muted small" style="font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin:0 0 7px 18px">📌 ${esc(project.name)}</div>${tasks.map(andonRow).join('')}</div>`;}).join('');
-  const ungroupedRed=red.filter(t=>!projectById(t.projectId)).map(andonRow).join('');
-  const redRows = red.length ? groupedRed+ungroupedRed :
+  const groupedRed=projectIds.map(projectId=>andonProjectCard(projectById(projectId),red.filter(t=>t.projectId===projectId))).join('');
+  const standaloneRed=red.filter(t=>!projectById(t.projectId));
+  const redRows = red.length ? `<div class="folder-grid andon-project-grid">${groupedRed}${standaloneRed.length?andonProjectCard(null,standaloneRed):''}</div>` :
     `<div class="empty" style="padding:26px"><div class="e-ic">✅</div>No stuck tasks. Flow is smooth.</div>`;
 
   // workload
@@ -233,6 +245,8 @@ function viewDashboard(){
   }).join('');
   const ownProgressSummary=TASK_PROGRESS_OPTIONS.map(([id,label])=>`<span class="chip" style="cursor:default">${label}: <b>${scope.filter(t=>(t.progress||'just_started')===id).length}</b></span>`).join('');
   const ownProgressRows=scope.map(t=>`<div class="row-item" data-task="${t.id}" style="cursor:pointer"><div style="flex:1"><b>${esc(t.title)}</b><div class="muted small">${esc(projectById(t.projectId)?.name||'Standalone task')}</div></div><span class="status-pill">${taskProgressLabel(t.progress)}</span></div>`).join('');
+  const adminTasks=session.role==='admin'?S().tasks.filter(t=>t.ownerId===session.id):[];
+  const adminTaskRows=adminTasks.map(t=>{const project=projectById(t.projectId),client=clientById(t.clientId),completed=t.status==='done'||t.progress==='completed';return `<div class="row-item ${completed?'task-row-completed':''}" data-task="${t.id}" style="cursor:pointer"><span class="light ${completed?'green':andonLevel(t)}"></span><div style="flex:1;min-width:0"><b style="font-size:14px">${esc(t.title)}</b><div class="muted small">${esc(project?.name||'Standalone task')} · ${esc(client?.company||'No client')}</div></div><span class="status-pill">${taskProgressLabel(t.progress)}</span></div>`;}).join('');
 
   const feed = S().activity.slice(0,8).map(a=>`
     <div class="row-item" style="padding:10px 12px">
@@ -248,15 +262,19 @@ function viewDashboard(){
       ${kpi(amber.length, 'Slowing (amber) 🟡')}
       ${kpi(overdue, 'Overdue', overdue?'Past due date':'On schedule', overdue?'var(--red)':'var(--green)')}
     </div>
-    <div class="grid" style="grid-template-columns:1.4fr 1fr">
+    ${session.role==='admin'?`
       <div class="card">
         <div class="section-head"><h2>🚦 Andon — needs attention now</h2><button class="btn-ghost small" data-go="andon">View all →</button></div>
         ${redRows}
       </div>
-      <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="grid" style="grid-template-columns:1.4fr 1fr;margin-top:16px">
+        <div class="card"><div class="section-head"><div><h3>My Tasks</h3><p class="muted small">Tasks assigned directly to ${esc(session.name)}.</p></div><span class="chip" style="cursor:default">${adminTasks.length} task${adminTasks.length===1?'':'s'}</span></div><div class="list">${adminTaskRows||'<div class="empty"><div class="e-ic">✅</div>No tasks are assigned to you</div>'}</div></div>
         <div class="card"><h3>Team workload (Heijunka)</h3>${workload || '<span class="muted small">No team members</span>'}</div>
-      </div>
-    </div>
+      </div>`:`
+      <div class="grid" style="grid-template-columns:1.4fr 1fr">
+        <div class="card"><div class="section-head"><h2>🚦 Andon — needs attention now</h2><button class="btn-ghost small" data-go="andon">View all →</button></div>${redRows}</div>
+        <div class="card"><h3>Team workload (Heijunka)</h3>${workload || '<span class="muted small">No team members</span>'}</div>
+      </div>`}
     ${session.role==='admin'?`<div class="card" style="margin-top:16px"><div class="section-head"><div><h3>Task progress by team member</h3><p class="muted small">Includes project tasks and standalone tasks.</p></div></div><div class="list">${progressRows||'<span class="muted">No team members</span>'}</div></div>`:''}
     ${session.role==='team'?`<div class="card" style="margin-top:16px"><div class="section-head"><div><h3>My task progress</h3><p class="muted small">Your project and standalone tasks.</p></div><div class="chips">${ownProgressSummary}</div></div><div class="list">${ownProgressRows||'<div class="empty">No tasks assigned to you</div>'}</div></div>`:''}
     <div class="card" style="margin-top:16px"><h3>Live activity (Gemba feed)</h3><div class="list">${feed||'<span class="muted">No activity yet</span>'}</div></div>
@@ -325,17 +343,17 @@ function viewProjects(){
       <div class="project-card-foot"><span class="status-pill st-${p.status||'new'}">${esc(p.status||'active')}</span></div>
     </div>`;
   }).join('');
-  return `<div class="section-head"><p class="muted">Create a project and assign every task to a specific team member.</p><button class="btn" data-add-project>+ Add project</button></div>
+  return `<div class="section-head"><p class="muted">Create a project and assign every task to a team member or admin.</p><button class="btn" data-add-project>+ Add project</button></div>
     <div class="folder-grid">${cards||'<div class="empty"><div class="e-ic">📌</div>No projects yet</div>'}</div>`;
 }
 
 function projectTaskRow(index, task=null){
-  const members=S().users.filter(u=>u.role==='team');
+  const members=assignableStaff();
   return `<div class="project-task-row" data-project-task="${index}" ${task?`data-task-id="${task.id}"`:''}>
     <div class="project-task-head"><div class="project-task-number">${index+1}</div><div><b>${task?'Existing task':'New task'}</b><span>${task?'Update its details or assignment':'Define and assign this task'}</span></div><button class="btn-ghost small" type="button" data-remove-project-task>Remove</button></div>
     <div class="field"><label>Task title <span class="req">*</span></label><input data-pt-title value="${esc(task?.title||'')}" placeholder="e.g. Design homepage mockup"></div>
     <div class="form-row">
-      <div class="field"><label>Assign to <span class="req">*</span></label><select data-pt-owner><option value="">Select team member</option>${members.map(u=>`<option value="${u.id}" ${u.id===task?.ownerId?'selected':''}>${esc(u.name)} · ${esc(u.dept||'General')}</option>`).join('')}</select></div>
+      <div class="field"><label>Assign to <span class="req">*</span></label><select data-pt-owner><option value="">Select team member or admin</option>${members.map(u=>`<option value="${u.id}" ${u.id===task?.ownerId?'selected':''}>${assigneeLabel(u)}</option>`).join('')}</select></div>
       <div class="field"><label>Priority</label><select data-pt-priority>${['low','med','high'].map(p=>`<option value="${p}" ${(task?.priority||'med')===p?'selected':''}>${p==='med'?'Medium':p[0].toUpperCase()+p.slice(1)}</option>`).join('')}</select></div>
     </div>
     <div class="form-row">
@@ -379,7 +397,7 @@ function openProjectForm(projectId=null){
     <div class="modal-body">
       <div class="project-form-section"><h3>Project details</h3><div class="form-row"><div class="field"><label>Project name <span class="req">*</span></label><input id="project-name" value="${esc(project?.name||'')}" placeholder="e.g. Website redesign"></div><div class="field"><label>Client</label><select id="project-client">${clientOpts}</select></div></div>
       <div class="field"><label>Description</label><textarea id="project-desc" placeholder="Project scope and goals">${esc(project?.desc||'')}</textarea></div></div>
-      <div class="project-form-section"><div class="section-head"><div><h3>Task list</h3><p class="muted small">Every task must have one accountable team member.</p></div><button class="btn-2 small" type="button" id="add-project-task">+ Add task</button></div>
+      <div class="project-form-section"><div class="section-head"><div><h3>Task list</h3><p class="muted small">Every task must have one accountable team member or admin.</p></div><button class="btn-2 small" type="button" id="add-project-task">+ Add task</button></div>
       <div id="project-task-list">${projectTasks.length?projectTasks.map((t,i)=>projectTaskRow(i,t)).join(''):projectTaskRow(0)}</div></div>
     </div><div class="modal-foot"><button class="btn-ghost" data-close>Cancel</button><button class="btn" id="save-project">${editing?'Save changes':'Create project'}</button></div></div>`;
   $('#modal-host').appendChild(modal);
@@ -395,7 +413,7 @@ function openProjectForm(projectId=null){
     if(!rows.length){toast('Add at least one task');return;}
     if(rows.some(row=>row._reading>0)){toast('Please wait for attachments to finish loading');return;}
     const invalid=rows.some(row=>!$('[data-pt-title]',row).value.trim()||!$('[data-pt-owner]',row).value);
-    if(invalid){toast('Every task needs a title and assigned team member');return;}
+    if(invalid){toast('Every task needs a title and assignee');return;}
     const id=project?.id||'p_'+Math.random().toString(36).slice(2,9), clientId=$('#project-client',modal).value||null, now=Date.now();
     if(project) Object.assign(project,{clientId,name,desc:$('#project-desc',modal).value.trim(),dueDate:null});
     else S().projects.push({id,clientId,name,desc:$('#project-desc',modal).value.trim(),status:'active'});
@@ -928,17 +946,17 @@ function openTeamTaskForm(){
   const clientOpts=`<option value="">No client</option>`+S().clients.map(c=>`<option value="${c.id}">${esc(c.company)}</option>`).join('');
   const projectOpts=`<option value="">No project</option>`+(S().projects||[]).map(p=>`<option value="${p.id}" data-client-id="${p.clientId||''}">${esc(p.name)}${p.clientId?` · ${esc(clientById(p.clientId)?.company||'No client')}`:''}</option>`).join('');
   const modal=document.createElement('div');modal.className='modal-scrim';
-  modal.innerHTML=`<div class="modal project-modal"><div class="modal-head"><div><h2>Add task</h2><p class="muted small">Create a task with the same details used by the Tasks menu. It will be assigned to you.</p></div><button class="btn-ghost" data-close>✕</button></div><div class="modal-body"><div class="form-row"><div class="field"><label>Client</label><select id="team-task-client">${clientOpts}</select></div><div class="field"><label>Project</label><select id="team-task-project">${projectOpts}</select></div></div><div id="team-task-fields">${projectTaskRow(0)}</div></div><div class="modal-foot"><button class="btn-ghost" data-close>Cancel</button><button class="btn" id="save-team-task">Create task</button></div></div>`;
+  modal.innerHTML=`<div class="modal project-modal"><div class="modal-head"><div><h2>Add task</h2><p class="muted small">Create a task and assign it to yourself or an admin.</p></div><button class="btn-ghost" data-close>✕</button></div><div class="modal-body"><div class="form-row"><div class="field"><label>Client</label><select id="team-task-client">${clientOpts}</select></div><div class="field"><label>Project</label><select id="team-task-project">${projectOpts}</select></div></div><div id="team-task-fields">${projectTaskRow(0)}</div></div><div class="modal-foot"><button class="btn-ghost" data-close>Cancel</button><button class="btn" id="save-team-task">Create task</button></div></div>`;
   $('#modal-host').appendChild(modal);const close=()=>modal.remove();modal.querySelectorAll('[data-close]').forEach(b=>b.onclick=close);modal.onclick=e=>{if(e.target===modal)close();};
-  const row=$('[data-project-task]',modal);$('[data-remove-project-task]',row)?.remove();const owner=$('[data-pt-owner]',row);owner.value=session.id;owner.disabled=true;bindProjectTaskFiles($('#team-task-fields',modal));
+  const row=$('[data-project-task]',modal);$('[data-remove-project-task]',row)?.remove();const owner=$('[data-pt-owner]',row);[...owner.options].forEach(option=>{const user=userById(option.value);if(user&&user.role!=='admin'&&user.id!==session.id)option.remove();});owner.value=session.id;bindProjectTaskFiles($('#team-task-fields',modal));
   $('#team-task-project',modal).onchange=e=>{const option=e.target.selectedOptions[0];if(option?.dataset.clientId)$('#team-task-client',modal).value=option.dataset.clientId;};
   $('#save-team-task',modal).onclick=async()=>{
-    const title=$('[data-pt-title]',row).value.trim();if(!title){toast('Enter a task title');return;}if(row._reading>0){toast('Please wait for attachments to finish loading');return;}
+    const title=$('[data-pt-title]',row).value.trim(),assignee=userById(owner.value);if(!title){toast('Enter a task title');return;}if(!assignee){toast('Select yourself or an admin');return;}if(row._reading>0){toast('Please wait for attachments to finish loading');return;}
     const now=Date.now();
     const projectId=$('#team-task-project',modal).value||null,linkedProject=projectById(projectId);
     const dueInput=$('[data-pt-due]',row).value;
-    const task={id:'t_'+Math.random().toString(36).slice(2,9),projectId,clientId:linkedProject?.clientId||$('#team-task-client',modal).value||null,title,desc:$('[data-pt-desc]',row).value.trim(),dept:session.dept||'General',ownerId:session.id,status:'todo',priority:$('[data-pt-priority]',row).value,progress:$('[data-pt-progress]',row).value,createdAt:now,stageAt:now,dueDate:dueInput?new Date(dueInput).getTime():null,recurring:null,attachments:row._attachments||[]};
-    S().tasks.push(task);try{await Store.save();logActivity(`${session.name} created "${title}" and assigned it to themselves`,'brief');close();render();buildNav();toast('✅ Task created and assigned to you');}catch(error){await Store.load();render();toast(error.message);}
+    const task={id:'t_'+Math.random().toString(36).slice(2,9),projectId,clientId:linkedProject?.clientId||$('#team-task-client',modal).value||null,title,desc:$('[data-pt-desc]',row).value.trim(),dept:assignee.dept||session.dept||'General',ownerId:assignee.id,status:'todo',priority:$('[data-pt-priority]',row).value,progress:$('[data-pt-progress]',row).value,createdAt:now,stageAt:now,dueDate:dueInput?new Date(dueInput).getTime():null,recurring:null,attachments:row._attachments||[]};
+    S().tasks.push(task);try{await Store.save();logActivity(`${session.name} created "${title}" and assigned it to ${assignee.name}`,'brief');close();render();buildNav();toast(`✅ Task assigned to ${assignee.name}`);}catch(error){await Store.load();render();toast(error.message);}
   };
 }
 
@@ -950,7 +968,7 @@ function openTask(id, calendarReadOnly=false){
   const c=clientById(t.clientId);
   const canManage = session.role==='admin' || (!calendarReadOnly && session.role==='team' && t.ownerId===session.id);
   const msgs = S().messages.filter(m=>m.taskId===t.id).sort((a,b)=>a.at-b.at);
-  const teamOpts = `<option value="">Unassigned</option>`+S().users.filter(u=>u.role==='team').map(u=>`<option value="${u.id}" ${u.id===t.ownerId?'selected':''}>${esc(u.name)} · ${u.dept}</option>`).join('');
+  const teamOpts = `<option value="">Unassigned</option>`+assignableStaff().map(u=>`<option value="${u.id}" ${u.id===t.ownerId?'selected':''}>${assigneeLabel(u)}</option>`).join('');
   const clientOpts=`<option value="" ${t.clientId?'':'selected'}>No client</option>`+S().clients.map(client=>`<option value="${client.id}" ${client.id===t.clientId?'selected':''}>${esc(client.company)}</option>`).join('');
   const projectOpts=`<option value="" ${t.projectId?'':'selected'}>No project</option>`+(S().projects||[]).map(project=>`<option value="${project.id}" data-client-id="${project.clientId||''}" ${project.id===t.projectId?'selected':''}>${esc(project.name)}</option>`).join('');
   const lvl=andonLevel(t);
@@ -1021,10 +1039,19 @@ async function deleteTask(taskId,modal=null){
    TASKS
 ============================================================ */
 function viewTasks(){
-  const all=S().tasks,pageSize=10,totalPages=Math.max(1,Math.ceil(all.length/pageSize));tasksPage=Math.min(Math.max(1,tasksPage),totalPages);
-  const rows=all.slice((tasksPage-1)*pageSize,tasksPage*pageSize).map(t=>{const client=clientById(t.clientId),project=projectById(t.projectId),owner=userById(t.ownerId);return `<div class="row-item" data-task="${t.id}" style="cursor:pointer"><div style="flex:1;min-width:0"><b style="font-size:14px">${esc(t.title)}</b><div class="muted small">${esc(client?.company||'No client')} · ${esc(project?.name||'No project')} · ${owner?esc(owner.name):'Unassigned'}</div></div><span class="prio ${t.priority}">${t.priority}</span><span class="status-pill">${taskProgressLabel(t.progress)}</span><div class="member-actions"><button class="btn-ghost small" data-edit-task="${t.id}">✏️ Edit</button><button class="btn-ghost small btn-delete-client" data-delete-task="${t.id}">🗑️ Delete</button></div></div>`;}).join('');
+  const all=session.role==='team'?S().tasks.filter(t=>t.ownerId===session.id):S().tasks,pageSize=10,totalPages=Math.max(1,Math.ceil(all.length/pageSize));tasksPage=Math.min(Math.max(1,tasksPage),totalPages);
+  const rows=all.slice((tasksPage-1)*pageSize,tasksPage*pageSize).map(t=>{const client=clientById(t.clientId),project=projectById(t.projectId),owner=userById(t.ownerId),completed=t.status==='done'||t.progress==='completed';return `<div class="row-item ${completed?'task-row-completed':''}" data-task="${t.id}" style="cursor:pointer"><div style="flex:1;min-width:0"><b style="font-size:14px">${esc(t.title)}</b><div class="muted small">${esc(client?.company||'No client')} · ${esc(project?.name||'No project')} · ${owner?esc(owner.name):'Unassigned'}</div></div><button class="task-complete-btn ${completed?'is-completed':''}" data-complete-task="${t.id}" ${completed?'disabled':''}>${completed?'✓ Completed':'Completed'}</button><span class="status-pill">${taskProgressLabel(t.progress)}</span><div class="member-actions"><button class="btn-ghost small" data-edit-task="${t.id}">✏️ Edit</button><button class="btn-ghost small btn-delete-client" data-delete-task="${t.id}">🗑️ Delete</button></div></div>`;}).join('');
   const pagination=totalPages>1?`<div class="section-head" style="margin-top:14px"><button class="btn-ghost small" data-tasks-page="${tasksPage-1}" ${tasksPage===1?'disabled':''}>← Previous</button><span class="muted small">Page ${tasksPage} of ${totalPages} · ${all.length} tasks</span><button class="btn-ghost small" data-tasks-page="${tasksPage+1}" ${tasksPage===totalPages?'disabled':''}>Next →</button></div>`:'';
-  return `<div class="section-head"><p class="muted">Create and manage individual tasks across clients and projects.</p><button class="btn" data-new-task>+ New task</button></div><div class="list">${rows||'<div class="empty"><div class="e-ic">✅</div>No tasks yet</div>'}</div>${pagination}`;
+  return `<div class="section-head"><p class="muted">${session.role==='team'?'View and complete tasks assigned to you.':'Create and manage individual tasks across clients and projects.'}</p><button class="btn" ${session.role==='team'?'data-add-team-task':'data-new-task'}>+ New task</button></div><div class="list">${rows||'<div class="empty"><div class="e-ic">✅</div>No tasks yet</div>'}</div>${pagination}`;
+}
+
+async function completeTask(taskId){
+  const task=S().tasks.find(t=>t.id===taskId);if(!task)return;
+  if(session.role!=='admin'&&!(session.role==='team'&&task.ownerId===session.id))return;
+  if(task.status==='done'||task.progress==='completed')return;
+  const previous={status:task.status,progress:task.progress,stageAt:task.stageAt};
+  task.status='done';task.progress='completed';task.stageAt=Date.now();
+  try{await Store.save();render();buildNav();logActivity(`${session.name} completed "${task.title}"`,'move');toast('✅ Task completed');}catch(error){Object.assign(task,previous);render();toast(error.message);}
 }
 
 function openNewTask(){
@@ -1035,7 +1062,7 @@ function openNewTask(){
   $('#modal-host').appendChild(modal);const close=()=>modal.remove();modal.querySelectorAll('[data-close]').forEach(b=>b.onclick=close);modal.onclick=e=>{if(e.target===modal)close();};
   const row=$('[data-project-task]',modal);$('[data-remove-project-task]',row)?.remove();bindProjectTaskFiles($('#new-task-fields',modal));
   $('#task-project',modal).onchange=e=>{const clientId=e.target.selectedOptions[0]?.dataset.clientId;if(clientId)$('#task-client',modal).value=clientId;};
-  $('#create-task',modal).onclick=async()=>{const title=$('[data-pt-title]',row).value.trim(),owner=userById($('[data-pt-owner]',row).value);if(!title){toast('Enter a task title');return;}if(!owner){toast('Select a team member');return;}if(row._reading>0){toast('Please wait for attachments to finish loading');return;}const projectId=$('#task-project',modal).value||null,project=projectById(projectId),clientId=project?.clientId||$('#task-client',modal).value||null,now=Date.now(),dueInput=$('[data-pt-due]',row).value;S().tasks.push({id:'t_'+Math.random().toString(36).slice(2,9),projectId,clientId,title,desc:$('[data-pt-desc]',row).value.trim(),dept:owner.dept||'General',ownerId:owner.id,status:'todo',priority:$('[data-pt-priority]',row).value,progress:$('[data-pt-progress]',row).value,createdAt:now,stageAt:now,dueDate:dueInput?new Date(dueInput).getTime():null,recurring:null,attachments:row._attachments||[]});try{await Store.save();close();go('tasks');toast('✅ Task created');}catch(error){await Store.load();render();toast(error.message);}};
+  $('#create-task',modal).onclick=async()=>{const title=$('[data-pt-title]',row).value.trim(),owner=userById($('[data-pt-owner]',row).value);if(!title){toast('Enter a task title');return;}if(!owner){toast('Select a team member or admin');return;}if(row._reading>0){toast('Please wait for attachments to finish loading');return;}const projectId=$('#task-project',modal).value||null,project=projectById(projectId),clientId=project?.clientId||$('#task-client',modal).value||null,now=Date.now(),dueInput=$('[data-pt-due]',row).value;S().tasks.push({id:'t_'+Math.random().toString(36).slice(2,9),projectId,clientId,title,desc:$('[data-pt-desc]',row).value.trim(),dept:owner.dept||'General',ownerId:owner.id,status:'todo',priority:$('[data-pt-priority]',row).value,progress:$('[data-pt-progress]',row).value,createdAt:now,stageAt:now,dueDate:dueInput?new Date(dueInput).getTime():null,recurring:null,attachments:row._attachments||[]});try{await Store.save();close();go('tasks');toast('✅ Task created');}catch(error){await Store.load();render();toast(error.message);}};
 }
 
 
@@ -1048,14 +1075,14 @@ function openNewRecurring(taskId=null){
   const editing=!!task;
   const clientOpts=`<option value="">No client</option>`+S().clients.map(c=>`<option value="${c.id}" ${task?.clientId===c.id?'selected':''}>${esc(c.company)}</option>`).join('');
   const projectOpts=`<option value="">No project</option>`+(S().projects||[]).map(p=>`<option value="${p.id}" data-client-id="${p.clientId||''}" ${task?.projectId===p.id?'selected':''}>${esc(p.name)}${p.clientId?` · ${esc(clientById(p.clientId)?.company||'No client')}`:''}</option>`).join('');
-  const memberOpts=S().users.filter(u=>u.role==='team').map(u=>`<option value="${u.id}" ${task?.ownerId===u.id?'selected':''}>${esc(u.name)} · ${esc(u.dept)}</option>`).join('');
+  const memberOpts=assignableStaff().map(u=>`<option value="${u.id}" ${task?.ownerId===u.id?'selected':''}>${assigneeLabel(u)}</option>`).join('');
   const modal=document.createElement('div'); modal.className='modal-scrim';
   modal.innerHTML=`<div class="modal"><div class="modal-head"><h2>${editing?'Edit':'New'} repeating task</h2><button class="btn-ghost" data-close>✕</button></div>
     <div class="modal-body">
       <div class="field"><label>Title</label><input id="rc-title" value="${esc(task?.title||'')}" placeholder="e.g. Weekly Instagram carousel"></div>
       <div class="form-row"><div class="field"><label>Client</label><select id="rc-client">${clientOpts}</select></div><div class="field"><label>Project</label><select id="rc-project">${projectOpts}</select></div></div>
       <div class="form-row">
-        <div class="field"><label>Assign to</label><select id="rc-owner"><option value="">Select team member</option>${memberOpts}</select></div>
+        <div class="field"><label>Assign to</label><select id="rc-owner"><option value="">Select team member or admin</option>${memberOpts}</select></div>
         <div class="field"><label>Repeats</label><select id="rc-freq"><option value="daily" ${task?.recurring==='daily'?'selected':''}>Daily</option><option value="alternate_days" ${task?.recurring==='alternate_days'?'selected':''}>Alternate Days</option><option value="weekly" ${!task||task.recurring==='weekly'?'selected':''}>Weekly</option><option value="monthly" ${task?.recurring==='monthly'?'selected':''}>Monthly</option></select></div>
       </div>
       <div class="form-row">
@@ -1070,7 +1097,7 @@ function openNewRecurring(taskId=null){
   $('#rc-project',modal).onchange=e=>{const clientId=e.target.selectedOptions[0]?.dataset.clientId;if(clientId)$('#rc-client',modal).value=clientId;};
   $('#rc-save').onclick=async()=>{
     const title=$('#rc-title').value.trim(); if(!title){toast('Add a title');return;}
-    const owner=userById($('#rc-owner').value); if(!owner){toast('Select a team member');return;}
+    const owner=userById($('#rc-owner').value); if(!owner){toast('Select a team member or admin');return;}
     const projectId=$('#rc-project',modal).value||null,project=projectById(projectId),clientId=project?.clientId||$('#rc-client',modal).value||null;
     const frequency=$('#rc-freq').value,now=Date.now();let nextRecurrenceAt=task?.nextRecurrenceAt;
     if(!editing||frequency!==task.recurring||!nextRecurrenceAt){const nextDate=new Date(now);if(frequency==='monthly'){const day=nextDate.getDate();nextDate.setDate(1);nextDate.setMonth(nextDate.getMonth()+1);nextDate.setDate(Math.min(day,new Date(nextDate.getFullYear(),nextDate.getMonth()+1,0).getDate()));}else nextDate.setDate(nextDate.getDate()+({daily:1,alternate_days:2,weekly:7}[frequency]));nextRecurrenceAt=nextDate.getTime();}
@@ -1107,6 +1134,7 @@ function bindView(){
   $$('[data-edit-recurring]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();openNewRecurring(btn.dataset.editRecurring);});
   $$('[data-delete-recurring]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();deleteTask(btn.dataset.deleteRecurring);});
   const nt=$('[data-new-task]'); if(nt) nt.onclick=openNewTask;
+  $$('[data-complete-task]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();completeTask(btn.dataset.completeTask);});
   $$('[data-edit-task]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();openTask(btn.dataset.editTask);});
   $$('[data-delete-task]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();deleteTask(btn.dataset.deleteTask);});
   $$('[data-tasks-page]').forEach(btn=>btn.onclick=()=>{if(btn.disabled)return;tasksPage=Number(btn.dataset.tasksPage);render();});

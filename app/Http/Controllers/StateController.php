@@ -121,6 +121,17 @@ class StateController extends Controller
             $stored = DB::table('users')->get()->map(fn($u) => [$u->id, $u->role, strtolower($u->email ?? '')])->sort()->values()->all();
             abort_unless($submitted === $stored, 403, 'Only admins can manage accounts.');
         }
+        $assignableUserIds = collect($data['users'])
+            ->filter(fn($user) => $user['role'] === 'team' || ($user['role'] === 'admin' && filled($user['email'] ?? null)))
+            ->pluck('id');
+        foreach ($data['tasks'] as $task) {
+            $ownerId = $task['ownerId'] ?? null;
+            abort_unless(
+                $ownerId === null || $assignableUserIds->contains($ownerId),
+                422,
+                'Tasks can only be assigned to an admin or team member.'
+            );
+        }
         $mailFailures = DB::transaction(fn () => $this->replaceState($data));
         return response()->json(['saved' => true, 'mailFailures' => $mailFailures]);
     }
