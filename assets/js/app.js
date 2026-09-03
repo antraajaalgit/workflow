@@ -15,6 +15,14 @@ const assignableStaff = () => S().users.filter(u => u.role === 'team' || (u.role
 const assigneeLabel = u => `${esc(u.name)} · ${u.role === 'admin' ? 'Admin' : esc(u.dept || 'Team')}`;
 const clientById = id => S().clients.find(c => c.id === id);
 const projectById = id => (S().projects || []).find(p => p.id === id);
+const compareNames = (a,b) => String(a||'').localeCompare(String(b||''),undefined,{sensitivity:'base',numeric:true});
+const projectsByName = projects => [...projects].sort((a,b)=>compareNames(a.name,b.name));
+const tasksByProjectName = tasks => [...tasks].sort((a,b)=>{
+  const aProject=projectById(a.projectId),bProject=projectById(b.projectId);
+  if(aProject&&!bProject)return -1;
+  if(!aProject&&bProject)return 1;
+  return (aProject&&bProject?compareNames(aProject.name,bProject.name):0)||compareNames(a.title,b.title);
+});
 const departments = () => S().departments || [];
 const departmentColor = name => {
   const color = departments().find(d=>d.name===name)?.color || DEPT_COLOR[name]?.fg || '#7a5c3e';
@@ -217,14 +225,14 @@ function viewDashboard(){
 
   const andonProjectCard=(project,tasks)=>{const projectTasks=project?S().tasks.filter(t=>t.projectId===project.id):tasks,complete=projectTasks.filter(t=>t.status==='done'||t.progress==='completed').length,progress=projectTasks.length?Math.round(complete/projectTasks.length*100):0,client=project?clientById(project.clientId):null;return `<div class="project-card andon-project-card">
     <div class="project-card-head"><div class="project-icon">🚦</div><span class="andon-count">${tasks.length} red</span></div>
-    <div class="project-client">${project?esc(client?.company||'No client'):'Unassigned project'}</div>
+    ${project?(client?`<div class="project-client">${esc(client.company)}</div>`:''):'<div class="project-client">Unassigned project</div>'}
     <h3>${project?esc(project.name):'Standalone tasks'}</h3>
     <p>${project?esc(project.desc||'Tasks in this project need immediate attention.'):'Tasks requiring attention that are not linked to a project.'}</p>
     <div class="andon-card-tasks">${tasks.map(t=>{const owner=userById(t.ownerId);return `<button class="andon-task-link" data-task="${t.id}"><span class="light red"></span><span><b>${esc(t.title)}</b><small>${owner?esc(owner.name):'Unassigned'} · ${fmtElapsed(t)}</small></span><span aria-hidden="true">→</span></button>`;}).join('')}</div>
     <div class="project-progress"><div><span>Project progress</span><b>${complete}/${projectTasks.length} tasks</b></div><div class="bar"><i style="width:${progress}%"></i></div></div>
     <div class="project-card-foot"><span class="status-pill andon-alert">Needs attention</span></div>
   </div>`;};
-  const projectIds=[...new Set(red.map(t=>t.projectId).filter(id=>projectById(id)))];
+  const projectIds=projectsByName([...new Set(red.map(t=>t.projectId).filter(id=>projectById(id)))].map(projectById)).map(project=>project.id);
   const groupedRed=projectIds.map(projectId=>andonProjectCard(projectById(projectId),red.filter(t=>t.projectId===projectId))).join('');
   const standaloneRed=red.filter(t=>!projectById(t.projectId));
   const redRows = red.length ? `<div class="folder-grid andon-project-grid">${groupedRed}${standaloneRed.length?andonProjectCard(null,standaloneRed):''}</div>` :
@@ -248,7 +256,7 @@ function viewDashboard(){
   const ownProgressSummary=TASK_PROGRESS_OPTIONS.map(([id,label])=>`<span class="chip" style="cursor:default">${label}: <b>${scope.filter(t=>(t.progress||'just_started')===id).length}</b></span>`).join('');
   const ownProgressRows=scope.map(t=>`<div class="row-item" data-task="${t.id}" style="cursor:pointer"><div style="flex:1"><b>${esc(t.title)}</b><div class="muted small">${esc(projectById(t.projectId)?.name||'Standalone task')}</div></div><span class="status-pill">${taskProgressLabel(t.progress)}</span></div>`).join('');
   const adminTasks=session.role==='admin'?S().tasks.filter(t=>t.ownerId===session.id):[];
-  const adminTaskRows=adminTasks.map(t=>{const project=projectById(t.projectId),client=clientById(t.clientId),completed=t.status==='done'||t.progress==='completed';return `<div class="row-item ${completed?'task-row-completed':''}" data-task="${t.id}" style="cursor:pointer"><span class="light ${completed?'green':andonLevel(t)}"></span><div style="flex:1;min-width:0"><b style="font-size:14px">${esc(t.title)}</b><div class="muted small">${esc(project?.name||'Standalone task')} · ${esc(client?.company||'No client')}</div></div><span class="status-pill">${taskProgressLabel(t.progress)}</span></div>`;}).join('');
+  const adminTaskRows=adminTasks.map(t=>{const project=projectById(t.projectId),client=clientById(t.clientId),completed=t.status==='done'||t.progress==='completed';return `<div class="row-item ${completed?'task-row-completed':''}" data-task="${t.id}" style="cursor:pointer"><span class="light ${completed?'green':andonLevel(t)}"></span><div style="flex:1;min-width:0"><b style="font-size:14px">${esc(t.title)}</b><div class="muted small">${esc(project?.name||'Standalone task')}${client?` · ${esc(client.company)}`:''}</div></div><span class="status-pill">${taskProgressLabel(t.progress)}</span></div>`;}).join('');
 
   const feed = S().activity.slice(0,8).map(a=>`
     <div class="row-item" style="padding:10px 12px">
@@ -283,7 +291,7 @@ function viewDashboard(){
 
 /* ---------- PROJECTS ---------- */
 function viewProjects(){
-  const projects = S().projects || [];
+  const projects = projectsByName(S().projects || []);
   const cards = projects.map(p=>{
     const c=clientById(p.clientId); const tasks=S().tasks.filter(t=>t.projectId===p.id);
     const complete=tasks.filter(t=>t.status==='done').length;
@@ -299,7 +307,7 @@ function viewProjects(){
           </div>
         </div>
       </div>
-      <div class="project-client">${esc(c?.company||'No client')}</div>
+      ${c?`<div class="project-client">${esc(c.company)}</div>`:''}
       <h3>${esc(p.name)}</h3>
       ${p.desc?`<p>${esc(p.desc)}</p>`:'<p class="muted">No project description</p>'}
       <div class="project-progress"><div><span>Progress</span><b>${complete}/${tasks.length} tasks</b></div><div class="bar"><i style="width:${progress}%"></i></div></div>
@@ -407,7 +415,7 @@ function andonRow(t){
   const c = clientById(t.clientId);
   return `<div class="andon-row ${lvl}" data-task="${t.id}">
     <span class="light ${lvl}"></span>
-    <div class="a-main"><b>${esc(t.title)}</b><span>${esc(c?.company||'No client')} · ${t.dept} · ${owner?esc(owner.name):'Unassigned'}</span></div>
+    <div class="a-main"><b>${esc(t.title)}</b><span>${c?`${esc(c.company)} · `:''}${t.dept} · ${owner?esc(owner.name):'Unassigned'}</span></div>
     <span class="status-pill st-${t.status}">${t.status.replace('_',' ')}</span>
     <span class="timer ${lvl==='green'?'':lvl}" data-timer="${t.id}">${fmtElapsed(t)}</span>
   </div>`;
@@ -460,9 +468,9 @@ function kcard(t){
 }
 function viewKanban(){
   let scope = S().tasks;
-  if (session.role==='team') scope = scope.filter(t=>t.ownerId===session.id || t.dept===session.dept);
+  if (session.role==='team') scope = scope.filter(t=>t.ownerId===session.id);
   const cols = COLS.map(col=>{
-    const items = scope.filter(t=>t.status===col.id);
+    const items = tasksByProjectName(scope.filter(t=>t.status===col.id));
     const wip = WIP[col.id];
     const over = wip && items.length>wip;
     return `<div class="kcol">
@@ -583,7 +591,7 @@ function viewRecurring(){
     const c=clientById(t.clientId), owner=userById(t.ownerId);
     return `<div class="row-item">
       <span style="font-size:16px">🔁</span>
-      <div style="flex:1"><b style="font-size:14px">${esc(t.title)}</b><div class="muted small">${esc(c?.company||'No client')} · ${t.dept} · ${owner?esc(owner.name):'—'} · Due: ${t.dueDate?new Date(t.dueDate).toLocaleDateString():'No due date'}</div></div>
+      <div style="flex:1"><b style="font-size:14px">${esc(t.title)}</b><div class="muted small">${c?`${esc(c.company)} · `:''}${t.dept} · ${owner?esc(owner.name):'—'} · Due: ${t.dueDate?new Date(t.dueDate).toLocaleDateString():'No due date'}</div></div>
       <span class="pill">${t.recurring.replaceAll('_',' ')}</span>
       <span class="status-pill">${taskProgressLabel(t.progress)}</span>
       <span class="status-pill st-${t.status}">${t.status.replace('_',' ')}</span>
@@ -953,7 +961,7 @@ function openTask(id){
     </div>
     <div class="modal-body">
       <div class="chips" style="margin-bottom:14px">
-        <span class="chip" style="cursor:default">📁 ${esc(c?.company||'No client')}</span>
+        ${c?`<span class="chip" style="cursor:default">📁 ${esc(c.company)}</span>`:''}
         <span class="chip" style="cursor:default">${t.dept}</span>
         <span class="chip" style="cursor:default">⏱ ${ACTIVE.includes(t.status)?fmtElapsed(t)+' in stage':'—'}</span>
         ${t.recurring?`<span class="chip" style="cursor:default">🔁 ${t.recurring.replaceAll('_',' ')}</span>`:''}
@@ -998,10 +1006,10 @@ async function deleteTask(taskId,modal=null){
    TASKS
 ============================================================ */
 function viewTasks(){
-  const all=session.role==='team'?S().tasks.filter(t=>t.ownerId===session.id):S().tasks,pageSize=10,totalPages=Math.max(1,Math.ceil(all.length/pageSize));tasksPage=Math.min(Math.max(1,tasksPage),totalPages);
+  const all=tasksByProjectName(session.role==='team'?S().tasks.filter(t=>t.ownerId===session.id):S().tasks),pageSize=10,totalPages=Math.max(1,Math.ceil(all.length/pageSize));tasksPage=Math.min(Math.max(1,tasksPage),totalPages);
   const cards=all.slice((tasksPage-1)*pageSize,tasksPage*pageSize).map(t=>{const client=clientById(t.clientId),project=projectById(t.projectId),owner=userById(t.ownerId),completed=t.status==='done'||t.progress==='completed';return `<article class="task-card ${completed?'task-row-completed':''}" data-task="${t.id}">
     <div class="task-card-head"><span class="status-pill">${taskProgressLabel(t.progress)}</span><div class="project-actions"><button class="project-menu-btn" data-task-menu="${t.id}" aria-label="Task actions" aria-expanded="false">⋮</button><div class="project-menu hidden" data-task-menu-popup="${t.id}">${completed?'<button disabled><span>✓</span>Completed</button>':`<button data-complete-task="${t.id}"><span>✓</span>Mark completed</button>`}<button data-edit-task="${t.id}"><span>✏️</span>Edit task</button><button class="danger" data-delete-task="${t.id}"><span>🗑️</span>Delete task</button></div></div></div>
-    <div class="project-client">${esc(client?.company||'No client')}</div><h3>${esc(t.title)}</h3>
+    ${client?`<div class="project-client">${esc(client.company)}</div>`:''}<h3>${esc(t.title)}</h3>
     <div class="task-project"><span>📌</span><div><small>Project</small><b>${esc(project?.name||'Standalone task')}</b></div></div>
     <p>${esc(t.desc||'No task description')}</p>
     ${t.dueDate&&!completed?`<div class="task-due-countdown ${t.dueDate<Date.now()?'overdue':''}" data-due-countdown="${t.dueDate}">⏳ ${dueCountdown(t.dueDate)}</div>`:''}
