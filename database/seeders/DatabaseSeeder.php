@@ -12,6 +12,13 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $now = now(); $ms = (int) floor(microtime(true) * 1000); $ago = fn(int $m) => $ms - $m * 60000; $ahead = fn(int $m) => $ms + $m * 60000;
+        DB::table('departments')->upsert([
+            ['id'=>'dept_design','name'=>'Design','color'=>'#7a5c3e','created_at'=>$now,'updated_at'=>$now],
+            ['id'=>'dept_development','name'=>'Development','color'=>'#3a6ea5','created_at'=>$now,'updated_at'=>$now],
+            ['id'=>'dept_content','name'=>'Content','color'=>'#a97e2e','created_at'=>$now,'updated_at'=>$now],
+            ['id'=>'dept_marketing','name'=>'Marketing','color'=>'#d94a3d','created_at'=>$now,'updated_at'=>$now],
+            ['id'=>'dept_seo','name'=>'SEO','color'=>'#3fa34d','created_at'=>$now,'updated_at'=>$now],
+        ], ['id'], ['name','color','updated_at']);
         $clients = [
             ['id'=>'c_lumen','name'=>'Priya Nair','company'=>'Lumen Cafe','email'=>'priya@lumencafe.com','phone'=>'+91 98xxx xxx01','color'=>'#7a5c3e'],
             ['id'=>'c_volt','name'=>'Karan Shah','company'=>'Volt Fitness','email'=>'karan@voltfit.in','phone'=>'+91 98xxx xxx02','color'=>'#3a6ea5'],

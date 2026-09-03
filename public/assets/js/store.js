@@ -1,6 +1,6 @@
 /* ============ NAGARE · Data Store (Laravel + MySQL) ============ */
 
-const DEPARTMENTS = ['Design', 'Development', 'Content', 'Marketing', 'SEO'];
+const DEFAULT_DEPARTMENTS = ['Design', 'Development', 'Content', 'Marketing', 'SEO'];
 
 const DEPT_COLOR = {
   Design:      { bg:'rgba(122,92,62,.13)',  fg:'#7a5c3e' },
@@ -9,7 +9,6 @@ const DEPT_COLOR = {
   Marketing:   { bg:'rgba(217,74,61,.12)',   fg:'#d94a3d' },
   SEO:         { bg:'rgba(63,163,77,.14)',   fg:'#3fa34d' },
 };
-
 /* Auto-delegation rules: keyword -> department (first match wins) */
 const DEFAULT_RULES = [
   { kw: 'logo,brand,poster,banner,design,graphic,ui,ux,mockup,creative', dept: 'Design' },
@@ -74,6 +73,7 @@ function seed() {
   ];
 
   return {
+    departments: DEFAULT_DEPARTMENTS.map(name=>({id:'dept_'+name.toLowerCase(),name,color:DEPT_COLOR[name].fg})),
     users, clients, projects: [], tasks, messages, activity, notifications,
     rules: DEFAULT_RULES,
     settings: { amberMin: 15, redMin: 25 },
@@ -155,6 +155,12 @@ async save(retry = true) {
     if (!response.ok) throw new Error('Unable to reset application data');
     this.data = await response.json();
     return this.data;
+  },
+  async generateRecurringTasks() {
+    const response = await fetch('/api/recurring-tasks/generate', { method:'POST', headers:this.headers() });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Unable to generate recurring tasks');
+    return data;
   },
   async currentSession() {
     const response = await fetch('/api/session', { headers: this.headers() });

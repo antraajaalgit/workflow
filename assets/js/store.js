@@ -1,6 +1,6 @@
 /* ============ NAGARE · Data Store (Laravel + MySQL) ============ */
 
-const DEPARTMENTS = ['Design', 'Development', 'Content', 'Marketing', 'SEO'];
+const DEFAULT_DEPARTMENTS = ['Design', 'Development', 'Content', 'Marketing', 'SEO'];
 
 const DEPT_COLOR = {
   Design:      { bg:'rgba(122,92,62,.13)',  fg:'#7a5c3e' },
@@ -74,6 +74,7 @@ function seed() {
   ];
 
   return {
+    departments: DEFAULT_DEPARTMENTS.map(name=>({id:'dept_'+name.toLowerCase(),name,color:DEPT_COLOR[name].fg})),
     users, clients, projects: [], tasks, messages, activity, notifications,
     rules: DEFAULT_RULES,
     settings: { amberMin: 15, redMin: 25 },
