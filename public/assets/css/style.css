@@ -52,6 +52,7 @@ h1,h2,h3{font-weight:650;letter-spacing:-.01em}
 .user-pick{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--panel);text-align:left;transition:.15s}
 .user-pick:hover{border-color:var(--accent2);transform:translateY(-1px)}
 .avatar{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font-weight:700;color:#fff;flex:none;font-size:14px}
+.avatar img{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}.member-image-field{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:10px}.member-image-field .field-hint{grid-column:2}
 .user-pick .meta{flex:1}
 .user-pick .meta b{font-size:14px}
 .user-pick .meta span{display:block;font-size:12px;color:var(--muted)}
@@ -139,6 +140,7 @@ h1,h2,h3{font-weight:650;letter-spacing:-.01em}
 .andon-row .a-main{flex:1;min-width:0}
 .andon-row .a-main b{font-size:14px;display:block}
 .andon-row .a-main span{font-size:12px;color:var(--muted)}
+.andon-row .a-main .andon-project-name{display:block;color:var(--accent);font-size:11px;font-weight:700;margin-bottom:3px}
 .timer{font-variant-numeric:tabular-nums;font-weight:700;font-size:15px;padding:5px 10px;border-radius:8px;background:var(--bg)}
 .timer.amber{color:var(--amber);background:rgba(224,161,43,.12)}
 .timer.red{color:var(--red);background:rgba(217,74,61,.12)}

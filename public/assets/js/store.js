@@ -205,6 +205,13 @@ async save(retry = true) {
     if(!response.ok)throw new Error(data.message||'Unable to upload attachments');
     return data.attachments||[];
   },
+  async uploadTeamMemberImage(file) {
+    const body=new FormData();body.append('image',file);
+    const response=await fetch('/api/team-member-image',{method:'POST',headers:this.headers(),body});
+    const data=await response.json();
+    if(!response.ok)throw new Error(data.message||'Unable to upload team member image');
+    return data.url;
+  },
   async sendChatEmail(payload) {
     const response = await fetch('/api/chat-email', {method:'POST',headers:this.headers({'Content-Type':'application/json'}),body:JSON.stringify(payload)});
     const data = await response.json();

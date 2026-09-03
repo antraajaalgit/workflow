@@ -103,6 +103,13 @@ class StateController extends Controller
     'max:20',
 ],
 
+'users.*.image' => [
+    'sometimes',
+    'nullable',
+    'string',
+    'max:255',
+],
+
 'users.*.password' => [
     'sometimes',
     'nullable',
@@ -122,8 +129,9 @@ class StateController extends Controller
         'This email is already being used by another account.',
 ]);
         if ($actor->role_id !== 1) {
-            $submitted = collect($data['users'])->map(fn($u) => [$u['id'], $u['role'], strtolower($u['email'] ?? '')])->sort()->values()->all();
-            $stored = DB::table('users')->get()->map(fn($u) => [$u->id, $u->role, strtolower($u->email ?? '')])->sort()->values()->all();
+            abort_if(collect($data['users'])->contains(fn ($user) => filled($user['password'] ?? null)), 403, 'Only admins can change passwords.');
+            $submitted = collect($data['users'])->map(fn($u) => [$u['id'], $u['role'], strtolower($u['email'] ?? ''), $u['image'] ?? null])->sort()->values()->all();
+            $stored = DB::table('users')->get()->map(fn($u) => [$u->id, $u->role, strtolower($u->email ?? ''), $u->image])->sort()->values()->all();
             abort_unless($submitted === $stored, 403, 'Only admins can manage accounts.');
             $submittedDepartments = collect($data['departments'])->map(fn($d) => [$d['id'], $d['name'], $d['color'] ?? null])->sort()->values()->all();
             $storedDepartments = DB::table('departments')->get()->map(fn($d) => [$d->id, $d->name, $d->color])->sort()->values()->all();
@@ -137,15 +145,16 @@ class StateController extends Controller
             abort_unless($user['role'] !== 'team' || $departmentNames->contains($user['dept'] ?? null), 422, 'Every team member must belong to an existing department.');
         }
         foreach ($data['tasks'] as $task) {
-            $ownerId = $task['ownerId'] ?? null;
-            abort_unless(
-                $ownerId === null || $assignableUserIds->contains($ownerId),
-                422,
-                'Tasks can only be assigned to an admin or team member.'
-            );
+            $ownerIds = $task['ownerIds'] ?? (filled($task['ownerId'] ?? null) ? [$task['ownerId']] : []);
+            abort_unless(is_array($ownerIds), 422, 'Task assignees must be provided as a list.');
+            abort_unless(collect($ownerIds)->every(fn ($ownerId) => $assignableUserIds->contains($ownerId)), 422, 'Tasks can only be assigned to admins or team members.');
         }
         $taskAssignments = $actor->role_id === 1 ? $this->newTeamTaskAssignments($data) : [];
-        $mailFailures = DB::transaction(fn () => $this->replaceState($data));
+        $teamPasswordChanges = $actor->role_id === 1 ? $this->teamPasswordChanges($data) : [];
+        $mailFailures = DB::transaction(fn () => $this->replaceState($data, $actor));
+        foreach ($teamPasswordChanges as $member) {
+            if (!$this->sendWelcomeEmail($member, $actor, true)) $mailFailures[] = $member['email'];
+        }
         $assignmentMailFailures = [];
         foreach ($taskAssignments as $assignment) {
             if (!$this->sendTaskAssignmentEmail($assignment)) $assignmentMailFailures[] = $assignment['member']['email'];
@@ -195,7 +204,7 @@ class StateController extends Controller
             'users' => DB::table('users')->get()->map(fn($r)=>$this->publicUser($r))->all(),
             'clients' => DB::table('clients')->get()->map(fn($r)=>['id'=>$r->id,'name'=>$r->name,'company'=>$r->company,'email'=>$r->email,'phone'=>$r->phone,'color'=>$r->color])->all(),
             'projects' => Schema::hasTable('projects') ? DB::table('projects')->get()->map(fn($r)=>['id'=>$r->id,'clientId'=>$r->client_id,'name'=>$r->name,'desc'=>$r->description,'status'=>$r->status,'dueDate'=>$r->due_date_ms ? (int)$r->due_date_ms : null])->all() : [],
-            'tasks' => DB::table('tasks')->get()->map(fn($r)=>['id'=>$r->id,'clientId'=>$r->client_id,'projectId'=>$r->project_id ?? null,'title'=>$r->title,'desc'=>$r->description,'dept'=>$r->department,'ownerId'=>$r->owner_id,'status'=>$r->status,'priority'=>$r->priority,'progress'=>$r->progress ?? 'just_started','createdAt'=>(int)$r->created_at_ms,'stageAt'=>(int)$r->stage_at_ms,'dueDate'=>$r->due_date_ms ? (int)$r->due_date_ms : null,'recurring'=>$r->recurring,'nextRecurrenceAt'=>$r->next_recurrence_at_ms ? (int)$r->next_recurrence_at_ms : null,'attachments'=>json_decode($r->attachments ?? '[]', true) ?: []])->all(),
+            'tasks' => DB::table('tasks')->get()->map(function($r){$ownerIds=json_decode($r->owner_ids??'[]',true)?:array_values(array_filter([$r->owner_id]));return ['id'=>$r->id,'clientId'=>$r->client_id,'projectId'=>$r->project_id ?? null,'title'=>$r->title,'desc'=>$r->description,'dept'=>$r->department,'ownerId'=>$ownerIds[0]??null,'ownerIds'=>$ownerIds,'status'=>$r->status,'priority'=>$r->priority,'progress'=>$r->progress ?? 'just_started','createdAt'=>(int)$r->created_at_ms,'stageAt'=>(int)$r->stage_at_ms,'dueDate'=>$r->due_date_ms ? (int)$r->due_date_ms : null,'recurring'=>$r->recurring,'nextRecurrenceAt'=>$r->next_recurrence_at_ms ? (int)$r->next_recurrence_at_ms : null,'attachments'=>json_decode($r->attachments ?? '[]', true) ?: []];})->all(),
             'messages' => DB::table('messages')->get()->map(fn($r)=>['id'=>$r->id,'clientId'=>$r->client_id,'taskId'=>$r->task_id,'fromId'=>$r->from_id,'fromRole'=>$r->from_role,'text'=>$r->text ?? '', 'voice'=>$r->voice,'attachments'=>json_decode($r->attachments ?? '[]', true) ?: [],'at'=>(int)$r->sent_at_ms])->all(),
             'activity' => DB::table('activities')->orderByDesc('occurred_at_ms')->get()->map(fn($r)=>['id'=>$r->id,'at'=>(int)$r->occurred_at_ms,'text'=>$r->text,'type'=>$r->type])->all(),
             'notifications' => DB::table('notifications')->orderByDesc('sent_at_ms')->get()->map(fn($r)=>['id'=>$r->id,'channel'=>$r->channel,'to'=>$r->recipient,'text'=>$r->text,'at'=>(int)$r->sent_at_ms])->all(),
@@ -204,7 +213,7 @@ class StateController extends Controller
         ];
     }
 
-    private function replaceState(array $s): array
+    private function replaceState(array $s, object $actor): array
     {
         $passwords = DB::table('users')->pluck('password', 'id');
         $existingIds = $passwords->keys()->all();
@@ -215,22 +224,37 @@ class StateController extends Controller
         $this->clear(); $now = now();
         DB::table('departments')->insert(array_map(fn($x)=>['id'=>$x['id'],'name'=>$x['name'],'color'=>$x['color']??null,'created_at'=>$now,'updated_at'=>$now],$s['departments']));
         DB::table('clients')->insert(array_map(fn($x)=>['id'=>$x['id'],'name'=>$x['name'],'company'=>$x['company'],'email'=>$x['email']??null,'phone'=>$x['phone']??null,'color'=>$x['color']??null,'created_at'=>$now,'updated_at'=>$now],$s['clients']));
-        DB::table('users')->insert(array_map(fn($x)=>['id'=>$x['id'],'name'=>$x['name'],'role'=>$x['role'],'role_id'=>$x['role']==='admin'?1:($x['role']==='team'?2:0),'department'=>$x['dept']??null,'client_id'=>$x['clientId']??null,'company'=>$x['company']??null,'email'=>filled($x['email']??null)?strtolower($x['email']):null,'password'=>isset($x['password'])?Hash::make($x['password']):$passwords[$x['id']],'phone'=>$x['phone']??null,'color'=>$x['color']??null,'created_at'=>$now,'updated_at'=>$now],$s['users']));
+        DB::table('users')->insert(array_map(fn($x)=>['id'=>$x['id'],'name'=>$x['name'],'role'=>$x['role'],'role_id'=>$x['role']==='admin'?1:($x['role']==='team'?2:0),'department'=>$x['dept']??null,'client_id'=>$x['clientId']??null,'company'=>$x['company']??null,'email'=>filled($x['email']??null)?strtolower($x['email']):null,'password'=>isset($x['password'])?Hash::make($x['password']):$passwords[$x['id']],'phone'=>$x['phone']??null,'color'=>$x['color']??null,'image'=>$x['image']??null,'created_at'=>$now,'updated_at'=>$now],$s['users']));
         DB::table('projects')->insert(array_map(fn($x)=>['id'=>$x['id'],'client_id'=>$x['clientId']??null,'name'=>$x['name'],'description'=>$x['desc']??null,'status'=>$x['status']??'active','due_date_ms'=>$x['dueDate']??null,'created_at'=>$now,'updated_at'=>$now],$s['projects']));
         $hasAttachments = Schema::hasColumn('tasks', 'attachments');
         DB::table('tasks')->insert(array_map(function ($x) use ($now, $hasAttachments) {
-            $task = ['id'=>$x['id'],'client_id'=>$x['clientId']??null,'project_id'=>$x['projectId']??null,'title'=>$x['title'],'description'=>$x['desc']??null,'department'=>filled($x['dept']??null)?$x['dept']:'General','owner_id'=>$x['ownerId']??null,'status'=>$x['status'],'priority'=>$x['priority'],'progress'=>$x['progress']??'just_started','created_at_ms'=>$x['createdAt'],'stage_at_ms'=>$x['stageAt'],'due_date_ms'=>$x['dueDate']??null,'recurring'=>$x['recurring']??null,'next_recurrence_at_ms'=>$x['nextRecurrenceAt']??null,'created_at'=>$now,'updated_at'=>$now];
+            $ownerIds=array_values(array_unique($x['ownerIds']??array_values(array_filter([$x['ownerId']??null]))));
+            $task = ['id'=>$x['id'],'client_id'=>$x['clientId']??null,'project_id'=>$x['projectId']??null,'title'=>$x['title'],'description'=>$x['desc']??null,'department'=>filled($x['dept']??null)?$x['dept']:'General','owner_id'=>$ownerIds[0]??null,'owner_ids'=>json_encode($ownerIds),'status'=>$x['status'],'priority'=>$x['priority'],'progress'=>$x['progress']??'just_started','created_at_ms'=>$x['createdAt'],'stage_at_ms'=>$x['stageAt'],'due_date_ms'=>$x['dueDate']??null,'recurring'=>$x['recurring']??null,'next_recurrence_at_ms'=>$x['nextRecurrenceAt']??null,'created_at'=>$now,'updated_at'=>$now];
             if ($hasAttachments) $task['attachments'] = json_encode($x['attachments'] ?? []);
             return $task;
         }, $s['tasks']));
-        DB::table('messages')->insert(array_map(fn($x)=>['id'=>$x['id'],'client_id'=>$x['clientId'],'task_id'=>$x['taskId']??null,'from_id'=>$x['fromId'],'from_role'=>$x['fromRole'],'text'=>$x['text']??null,'voice'=>$x['voice']??null,'attachments'=>json_encode($x['attachments']??[]),'sent_at_ms'=>$x['at'],'created_at'=>$now,'updated_at'=>$now],$s['messages']));
+        $clientIds = collect($s['clients'])->pluck('id')->flip();
+        $taskIds = collect($s['tasks'])->pluck('id')->flip();
+        DB::table('messages')->insert(array_map(fn($x)=>[
+            'id'=>$x['id'],
+            'client_id'=>$clientIds->has($x['clientId']??null)?$x['clientId']:null,
+            'task_id'=>$taskIds->has($x['taskId']??null)?$x['taskId']:null,
+            'from_id'=>$x['fromId'],
+            'from_role'=>$x['fromRole'],
+            'text'=>$x['text']??null,
+            'voice'=>$x['voice']??null,
+            'attachments'=>json_encode($x['attachments']??[]),
+            'sent_at_ms'=>$x['at'],
+            'created_at'=>$now,
+            'updated_at'=>$now,
+        ],$s['messages']));
         DB::table('activities')->insert(array_map(fn($x)=>['id'=>$x['id'],'occurred_at_ms'=>$x['at'],'text'=>$x['text'],'type'=>$x['type'],'created_at'=>$now,'updated_at'=>$now],$s['activity']));
         DB::table('notifications')->insert(array_map(fn($x)=>['id'=>$x['id'],'channel'=>$x['channel'],'recipient'=>$x['to'],'text'=>$x['text'],'sent_at_ms'=>$x['at'],'created_at'=>$now,'updated_at'=>$now],$s['notifications']));
         DB::table('delegation_rules')->insert(array_map(fn($x,$i)=>['sort_order'=>$i,'keywords'=>$x['kw'],'department'=>$x['dept'],'created_at'=>$now,'updated_at'=>$now],$s['rules'],array_keys($s['rules'])));
         DB::table('settings')->insert([['key'=>'amberMin','value'=>(string)$s['settings']['amberMin'],'created_at'=>$now,'updated_at'=>$now],['key'=>'redMin','value'=>(string)$s['settings']['redMin'],'created_at'=>$now,'updated_at'=>$now]]);
         $mailFailures = [];
         foreach ($newUsers as $user) {
-            if (!$this->sendWelcomeEmail($user)) $mailFailures[] = $user['email'];
+            if (!$this->sendWelcomeEmail($user, $actor)) $mailFailures[] = $user['email'];
         }
         return $mailFailures;
     }
@@ -253,6 +277,31 @@ class StateController extends Controller
             return ['id'=>(string)Str::uuid(),'name'=>$file->getClientOriginalName(),'type'=>$file->getMimeType() ?: 'application/octet-stream','size'=>$file->getSize(),'data' => '/api/chat-attachment?file=' . rawurlencode(basename($path))];
         })->values();
         return response()->json(['attachments' => $attachments]);
+    }
+
+    public function uploadTeamMemberImage(Request $request): JsonResponse
+    {
+        $this->requireAdmin($request);
+        $request->validate(['image' => ['required', 'image', 'mimes:jpg,jpeg,png,gif,webp', 'max:2048']]);
+        $file = $request->file('image');
+        $extension = preg_replace('/[^a-z0-9]/i', '', $file->getClientOriginalExtension()) ?: 'jpg';
+        $path = $file->storeAs('team-member-images', Str::uuid().'.'.$extension, 'public');
+
+        return response()->json(['url' => '/api/team-member-image?file='.rawurlencode(basename($path))]);
+    }
+
+    public function showTeamMemberImage(Request $request): BinaryFileResponse
+    {
+        $this->requireUser($request);
+        $file = (string) $request->query('file', '');
+        abort_unless($file !== '' && $file === basename($file) && preg_match('/^[a-f0-9-]+\.[a-z0-9]+$/i', $file), 404);
+        $path = 'team-member-images/'.$file;
+        abort_unless(Storage::disk('public')->exists($path), 404);
+
+        return response()->file(Storage::disk('public')->path($path), [
+            'Cache-Control' => 'private, max-age=86400',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     public function generateRecurringTasks(Request $request, RecurringTaskGenerator $generator): JsonResponse
@@ -365,24 +414,68 @@ class StateController extends Controller
 
     private function publicUser(object $r): array
     {
-        return ['id'=>$r->id,'name'=>$r->name,'role'=>$r->role,'roleId'=>(int)$r->role_id,'dept'=>$r->department,'clientId'=>$r->client_id,'company'=>$r->company,'email'=>$r->email,'phone'=>$r->phone,'color'=>$r->color];
+        return ['id'=>$r->id,'name'=>$r->name,'role'=>$r->role,'roleId'=>(int)$r->role_id,'dept'=>$r->department,'clientId'=>$r->client_id,'company'=>$r->company,'email'=>$r->email,'phone'=>$r->phone,'color'=>$r->color,'image'=>$r->image];
     }
 
-    private function sendWelcomeEmail(array $user): bool
+    private function sendWelcomeEmail(array $user, object $actor, bool $passwordChanged = false): bool
     {
         $role = $user['role'] === 'team' ? 'team member' : 'client';
+        $loginDetails = "Email: {$user['email']}\nPassword: {$user['password']}\n\nSign in at: ".url('/');
+        $sent = true;
+        $memberIntro = $passwordChanged
+            ? "Your Karya {$role} password has been updated."
+            : "Your Karya {$role} account is ready.";
+        $memberSubject = $passwordChanged ? 'Your updated Karya login details' : 'Your Karya login details';
+
         try {
-            Mail::raw("Hello {$user['name']},\n\nYour Karya {$role} account is ready.\n\nEmail: {$user['email']}\nPassword: {$user['password']}\n\nSign in at: ".url('/'), function ($message) use ($user) {
-                $message->to($user['email'], $user['name'])->subject('Your Karya login details');
+            Mail::raw("Hello {$user['name']},\n\n{$memberIntro}\n\n{$loginDetails}", function ($message) use ($user, $memberSubject) {
+                $message->to($user['email'], $user['name'])->subject($memberSubject);
             });
-            return true;
         } catch (\Throwable $exception) {
             Log::warning('Nagare welcome email could not be sent.', [
                 'recipient' => $user['email'],
                 'error' => $exception->getMessage(),
             ]);
-            return false;
+            $sent = false;
         }
+
+        if ($user['role'] === 'team' && filled($actor->email ?? null) && strcasecmp($actor->email, $user['email']) !== 0) {
+            $adminIntro = $passwordChanged
+                ? "The Karya password for team member {$user['name']} has been updated."
+                : "A new Karya team member account has been created for {$user['name']}.";
+            $adminSubject = $passwordChanged
+                ? "Updated Karya login details for {$user['name']}"
+                : "Karya login details for {$user['name']}";
+            try {
+                Mail::raw("Hello {$actor->name},\n\n{$adminIntro}\n\n{$loginDetails}", function ($message) use ($actor, $adminSubject) {
+                    $message->to($actor->email, $actor->name)
+                        ->subject($adminSubject);
+                });
+            } catch (\Throwable $exception) {
+                Log::warning('Karya admin copy of team member login details could not be sent.', [
+                    'member_id' => $user['id'],
+                    'recipient' => $actor->email,
+                    'error' => $exception->getMessage(),
+                ]);
+                $sent = false;
+            }
+        }
+
+        return $sent;
+    }
+
+    private function teamPasswordChanges(array $state): array
+    {
+        $existingUserIds = DB::table('users')->pluck('id')->all();
+
+        return collect($state['users'])
+            ->filter(fn ($user) =>
+                $user['role'] === 'team'
+                && in_array($user['id'], $existingUserIds, true)
+                && filled($user['password'] ?? null)
+            )
+            ->values()
+            ->all();
     }
 
     private function newTeamTaskAssignments(array $state): array
@@ -395,10 +488,10 @@ class StateController extends Controller
 
         return collect($state['tasks'])
             ->reject(fn ($task) => in_array($task['id'], $existingTaskIds, true))
-            ->filter(fn ($task) => $teamMembers->has($task['ownerId'] ?? null))
-            ->map(function ($task) use ($teamMembers, $projects) {
+            ->flatMap(function ($task) use ($teamMembers, $projects) {
                 $project = filled($task['projectId'] ?? null) ? $projects->get($task['projectId']) : null;
-                return ['task' => $task, 'member' => $teamMembers->get($task['ownerId']), 'project' => $project];
+                $ownerIds=$task['ownerIds']??array_values(array_filter([$task['ownerId']??null]));
+                return collect($ownerIds)->filter(fn($id)=>$teamMembers->has($id))->map(fn($id)=>['task'=>$task,'member'=>$teamMembers->get($id),'project'=>$project]);
             })
             ->values()
             ->all();

@@ -111,4 +111,12 @@ const Store = {
     if(!response.ok)throw new Error(data.message||'Unable to email the client');
     return data;
   },
+  async uploadTeamMemberImage(file) {
+    const body=new FormData();body.append('image',file);
+    const token=document.querySelector('meta[name="csrf-token"]')?.content;
+    const response=await fetch('/api/team-member-image',{method:'POST',headers:{Accept:'application/json',...(token?{'X-CSRF-TOKEN':token}:{})},body});
+    const data=await response.json();
+    if(!response.ok)throw new Error(data.message||'Unable to upload team member image');
+    return data.url;
+  },
 };

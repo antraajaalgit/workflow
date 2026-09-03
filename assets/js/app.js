@@ -34,9 +34,21 @@ const TASK_PROGRESS_OPTIONS = [['just_started','Just started'],['25','25% done']
 const taskProgressOptions = value => TASK_PROGRESS_OPTIONS.map(([id,label])=>`<option value="${id}" ${(value||'just_started')===id?'selected':''}>${label}</option>`).join('');
 const taskProgressLabel = value => TASK_PROGRESS_OPTIONS.find(([id])=>id===(value||'just_started'))?.[1] || 'Just started';
 
+function generatePassword(length=14){
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
+  const bytes=new Uint32Array(length);crypto.getRandomValues(bytes);
+  return Array.from(bytes,n=>chars[n%chars.length]).join('');
+}
+function passwordField(id, required=true){
+  return `<div class="field"><label>Password ${required?'<span class="req">*</span>':''}</label><div class="password-input"><input id="${id}" type="text" autocomplete="new-password" ${required?'required':''} minlength="8" placeholder="Minimum 8 characters"><button type="button" class="password-toggle" data-password-toggle="${id}">Hide</button></div><div class="password-tools"><button type="button" class="btn-2 small" data-generate-password="${id}">Generate password</button><span class="field-hint">Generate securely or type one manually.</span></div></div>`;
+}
+function bindPasswordTools(root=document){
+  $$('[data-generate-password]',root).forEach(b=>b.onclick=()=>{const input=$('#'+b.dataset.generatePassword,root);input.value=generatePassword();input.type='text';const toggle=$(`[data-password-toggle="${input.id}"]`,root);if(toggle)toggle.textContent='Hide';});
+  $$('[data-password-toggle]',root).forEach(b=>b.onclick=()=>{const input=$('#'+b.dataset.passwordToggle,root);input.type=input.type==='password'?'text':'password';b.textContent=input.type==='password'?'Show':'Hide';});
+}
 function avatar(u, cls='') {
   if (!u) return '';
-  return `<span class="avatar ${cls}" style="background:${u.color||'#7a5c3e'}">${initials(u.name)}</span>`;
+  return `<span class="avatar ${cls}" style="background:${u.color||'#7a5c3e'}">${u.image?`<img src="${esc(u.image)}" alt="${esc(u.name)}">`:initials(u.name)}</span>`;
 }
 function timeAgo(ts) {
   const d = Math.floor((Date.now()-ts)/60000);
@@ -109,7 +121,7 @@ function toast(msg, cls=''){
 function delegate(text){
   return departments()[0]?.name || 'General';
 }
-function activeLoad(uid){ return S().tasks.filter(t=>t.ownerId===uid && ACTIVE.includes(t.status) && t.progress!=='completed').length; }
+function activeLoad(uid){ return S().tasks.filter(t=>(t.ownerIds?.length?t.ownerIds:(t.ownerId?[t.ownerId]:[])).includes(uid) && ACTIVE.includes(t.status) && t.progress!=='completed').length; }
 
 /* ============================================================
    AUTH
@@ -413,9 +425,10 @@ function andonRow(t){
   const lvl = andonLevel(t);
   const owner = userById(t.ownerId);
   const c = clientById(t.clientId);
+  const project = projectById(t.projectId);
   return `<div class="andon-row ${lvl}" data-task="${t.id}">
     <span class="light ${lvl}"></span>
-    <div class="a-main"><b>${esc(t.title)}</b><span>${c?`${esc(c.company)} · `:''}${t.dept} · ${owner?esc(owner.name):'Unassigned'}</span></div>
+    <div class="a-main">${project?`<span class="andon-project-name">📌 ${esc(project.name)}</span>`:''}<b>${esc(t.title)}</b><span>${c?`${esc(c.company)} · `:''}${t.dept} · ${owner?esc(owner.name):'Unassigned'}</span></div>
     <span class="status-pill st-${t.status}">${t.status.replace('_',' ')}</span>
     <span class="timer ${lvl==='green'?'':lvl}" data-timer="${t.id}">${fmtElapsed(t)}</span>
   </div>`;
@@ -676,25 +689,32 @@ function openTeamMember(memberId=null){
         <div class="field"><label>Phone <span class="req">*</span></label><input id="tm-phone" type="tel" value="${esc(member?.phone || '')}" placeholder="+91 98765 43210"></div>
       </div>
       <div class="field"><label>Department <span class="req">*</span></label><select id="tm-dept">${departments().map(d=>`<option value="${esc(d.name)}" ${member?.dept===d.name?'selected':''}>${esc(d.name)}</option>`).join('')}</select></div>
+      <div class="field"><label>Profile image <span class="muted small">(optional)</span></label><div class="member-image-field"><div id="tm-image-preview">${member?avatar(member):'<span class="avatar">＋</span>'}</div><input id="tm-image" type="file" accept="image/jpeg,image/png,image/gif,image/webp"><span class="field-hint">JPG, PNG, GIF or WebP up to 2 MB.${member?.image?' Leave empty to keep the current image.':''}</span></div></div>
+      ${passwordField('tm-password',!member)}
+      ${member?'<div class="hint">Leave the password empty to keep the current password.</div>':''}
     </div><div class="modal-foot"><button class="btn-ghost" data-close>Cancel</button><button class="btn" id="tm-save">${member?'Save changes':'Add member'}</button></div></div>`;
   $('#modal-host').appendChild(modal);
+  bindPasswordTools(modal);
+  let imageFile=null;$('#tm-image',modal).onchange=e=>{const file=e.target.files[0];if(!file)return;if(file.size>2*1024*1024){toast('Profile image must be 2 MB or smaller');e.target.value='';return;}imageFile=file;$('#tm-image-preview',modal).innerHTML=`<span class="avatar"><img src="${URL.createObjectURL(file)}" alt="Image preview"></span>`;};
   modal.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>modal.remove());
   modal.onclick=e=>{if(e.target===modal)modal.remove();};
   $('#tm-save').onclick=async()=>{
-    const name=$('#tm-name').value.trim(), email=$('#tm-email').value.trim(), phone=$('#tm-phone').value.trim(), dept=$('#tm-dept').value;
-    if(!name || !email || !phone || !dept){ toast('Name, email, phone and department are required'); return; }
+    const name=$('#tm-name').value.trim(), email=$('#tm-email').value.trim(), phone=$('#tm-phone').value.trim(), dept=$('#tm-dept').value, password=$('#tm-password',modal).value;
+    if(!name || !email || !phone || !dept || (!member&&!password)){ toast('Name, email, phone, department and password are required'); return; }
+    if(password&&password.length<8){toast('Password must be at least 8 characters');return;}
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ toast('Enter a valid email address'); return; }
     if(S().users.some(u=>u.id!==memberId && u.email && u.email.toLowerCase()===email.toLowerCase())){ toast('That email is already in use'); return; }
     const previous = member ? {...member} : null;
     const added = member ? null : {id:'u_'+Math.random().toString(36).slice(2,9),name,email,phone,dept,role:'team',color:departmentColor(dept).fg};
-    if(member) Object.assign(member,{name,email,phone,dept});
+    if(member) Object.assign(member,{name,email,phone,dept},password?{password}:{});
     else S().users.push(added);
     const saveButton = $('#tm-save');
     saveButton.disabled = true; saveButton.textContent = 'Saving…';
     try {
-      await Store.save(); modal.remove(); render(); toast(member?'✅ Team member updated':'✅ Team member added');
+      if(imageFile)(member||added).image=await Store.uploadTeamMemberImage(imageFile);
+      const result=await Store.save();S().users.forEach(u=>delete u.password);modal.remove();render();toast(member?(password?(result?.mailFailures?.length?'✅ Password updated, but a login email could not be sent':'✅ Team member updated — login emails sent to member and admin'):'✅ Team member updated'):result?.mailFailures?.length?'✅ Team member added, but a login email could not be sent':'✅ Team member added — login emails sent to member and admin');
     } catch (error) {
-      if(member) Object.assign(member, previous);
+      if(member){delete member.password;delete member.image;Object.assign(member,previous);}
       else S().users = S().users.filter(u=>u.id!==added.id);
       saveButton.disabled = false; saveButton.textContent = member?'Save changes':'Add member';
       toast(`Could not save team member: ${error.message}`);
@@ -799,7 +819,7 @@ function viewMessages(){
 function renderChat(msgs){
   if (!msgs.length) return '<div class="empty" style="padding:30px"><div class="e-ic">💬</div>No messages yet</div>';
   return `<div class="chat">${msgs.map(m=>{
-    const out = session.role!=='client' ? m.fromRole!=='client' : m.fromRole==='client';
+    const out = m.fromId===session.id;
     const u = userById(m.fromId);
     const body = m.voice
       ? `<div class="voice-note">🎤 <audio controls src="${m.voice}"></audio></div>`
@@ -847,6 +867,7 @@ async function toggleRecord(btn, onDone){
 ============================================================ */
 async function sendMessage(clientId, taskId, text, voice){
   if (!text && !voice) return;
+  clientId=clientById(clientId)?.id||null;
   const msg = { id:Math.random().toString(36).slice(2,9), clientId, taskId:taskId||null, fromId:session.id, fromRole:session.role==='client'?'client':'team', text:text||'', voice:voice||null, at:Date.now() };
   S().messages.push(msg); Store.save();
   const c = clientById(clientId);
@@ -856,15 +877,15 @@ async function sendMessage(clientId, taskId, text, voice){
     Notify.both({ phone:'+91 agency-team', email:'team@antrajaal.com',
       waText:`💬 New message from ${clientName} (${company}): "${voice?'🎤 voice note':text}"`,
       emailText:`Subject: New message from ${company}` });
-  } else {
+  } else if (c) {
     try {
       await Store.sendChatEmail({clientId,taskId:taskId||null,text:text||null,hasVoice:!!voice,attachmentNames:[]});
       toast(`✉️ Email sent to ${c?.email||'client'}`);
     } catch (error) {
       toast(error.message);
     }
-  }
-  render();
+  } else toast('✅ Message sent');
+  if(taskId){document.querySelectorAll('.modal-scrim').forEach(modal=>modal.remove());openTask(taskId);}else render();
 }
 
 /* ============================================================

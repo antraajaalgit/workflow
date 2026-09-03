@@ -13,6 +13,8 @@ Route::prefix('api')->group(function () {
     Route::post('/state/reset', [StateController::class, 'reset']);
     Route::post('/recurring-tasks/generate', [StateController::class, 'generateRecurringTasks'])->middleware('throttle:10,1');
     Route::post('/chat-attachments', [StateController::class, 'uploadChatAttachments']);
+    Route::post('/team-member-image', [StateController::class, 'uploadTeamMemberImage']);
+    Route::get('/team-member-image', [StateController::class, 'showTeamMemberImage']);
     Route::post('/chat-email', [StateController::class, 'sendChatEmail'])->middleware('throttle:30,1');
     //Route::get('/chat-attachments/{file}', [StateController::class, 'showChatAttachment']);
     Route::get('/chat-attachment', [StateController::class, 'showChatAttachment']);

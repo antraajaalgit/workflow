@@ -19,6 +19,12 @@ const assignableStaff = () => S().users.filter(u => u.role === 'team' || (u.role
 const assigneeLabel = u => `${esc(u.name)} · ${u.role === 'admin' ? 'Admin' : esc(u.dept || 'Team')}`;
 const clientById = id => S().clients.find(c => c.id === id);
 const projectById = id => (S().projects || []).find(p => p.id === id);
+const taskOwnerIds = task => task.ownerIds?.length ? task.ownerIds : (task.ownerId ? [task.ownerId] : []);
+const taskOwners = task => taskOwnerIds(task).map(userById).filter(Boolean);
+const isTaskOwner = (task,userId) => taskOwnerIds(task).includes(userId);
+const selectedValues = select => [...select.selectedOptions].map(option=>option.value).filter(Boolean);
+const taskOwnerNames = task => taskOwners(task).map(owner=>owner.name).join(', ');
+const taskOwnerAvatars = task => taskOwners(task).map(owner=>avatar(owner)).join('');
 const compareNames = (a,b) => String(a||'').localeCompare(String(b||''),undefined,{sensitivity:'base',numeric:true});
 const projectsByName = projects => [...projects].sort((a,b)=>compareNames(a.name,b.name));
 const tasksByProjectName = tasks => [...tasks].sort((a,b)=>{
@@ -51,7 +57,7 @@ function bindPasswordTools(root=document){
 }
 function avatar(u, cls='') {
   if (!u) return '';
-  return `<span class="avatar ${cls}" style="background:${u.color||'#7a5c3e'}">${initials(u.name)}</span>`;
+  return `<span class="avatar ${cls}" style="background:${u.color||'#7a5c3e'}">${u.image?`<img src="${esc(u.image)}" alt="${esc(u.name)}">`:initials(u.name)}</span>`;
 }
 function timeAgo(ts) {
   const d = Math.floor((Date.now()-ts)/60000);
@@ -124,7 +130,7 @@ function toast(msg, cls=''){
 function delegate(text){
   return departments()[0]?.name || 'General';
 }
-function activeLoad(uid){ return S().tasks.filter(t=>t.ownerId===uid && ACTIVE.includes(t.status) && t.progress!=='completed').length; }
+function activeLoad(uid){ return S().tasks.filter(t=>isTaskOwner(t,uid) && ACTIVE.includes(t.status) && t.progress!=='completed').length; }
 
 /* ============================================================
    AUTH
@@ -216,7 +222,7 @@ function render(){
 
 /* ---------- DASHBOARD ---------- */
 function viewDashboard(){
-  const scope = session.role==='team' ? S().tasks.filter(t=>t.ownerId===session.id) : S().tasks;
+  const scope = session.role==='team' ? S().tasks.filter(t=>isTaskOwner(t,session.id)) : S().tasks;
   const active = scope.filter(t=>ACTIVE.includes(t.status) && t.progress!=='completed');
   const red = scope.filter(t=>andonLevel(t)==='red');
   const amber = scope.filter(t=>andonLevel(t)==='amber');
@@ -252,12 +258,12 @@ function viewDashboard(){
       <div class="bar"><i style="width:${activeLoad(u.id)/maxLoad*100}%;background:${activeLoad(u.id)>=4?'var(--red)':'var(--accent2)'}"></i></div>
     </div>`).join('');
   const progressRows = team.map(u=>{
-    const memberTasks=S().tasks.filter(t=>t.ownerId===u.id);
+    const memberTasks=S().tasks.filter(t=>isTaskOwner(t,u.id));
     return `<div class="row-item" data-member-task-details="${u.id}" role="button" tabindex="0" style="cursor:pointer"><div style="flex:1;min-width:150px">${avatar(u)} <b>${esc(u.name)}</b><div class="muted small">${memberTasks.length} task${memberTasks.length===1?'':'s'} · Click row for details</div></div><div class="chips" style="justify-content:flex-end">${TASK_PROGRESS_OPTIONS.map(([id,label])=>`<span class="chip" style="cursor:inherit">${label}: <b>${memberTasks.filter(t=>(t.progress||'just_started')===id).length}</b></span>`).join('')}</div></div>`;
   }).join('');
   const ownProgressSummary=TASK_PROGRESS_OPTIONS.map(([id,label])=>`<span class="chip" style="cursor:default">${label}: <b>${scope.filter(t=>(t.progress||'just_started')===id).length}</b></span>`).join('');
   const ownProgressRows=scope.map(t=>`<div class="row-item" data-task="${t.id}" style="cursor:pointer"><div style="flex:1"><b>${esc(t.title)}</b><div class="muted small">${esc(projectById(t.projectId)?.name||'Standalone task')}</div></div><span class="status-pill">${taskProgressLabel(t.progress)}</span></div>`).join('');
-  const adminTasks=session.role==='admin'?S().tasks.filter(t=>t.ownerId===session.id):[];
+  const adminTasks=session.role==='admin'?S().tasks.filter(t=>isTaskOwner(t,session.id)):[];
   const adminTaskRows=adminTasks.map(t=>{const project=projectById(t.projectId),client=clientById(t.clientId),completed=t.status==='done'||t.progress==='completed';return `<div class="row-item ${completed?'task-row-completed':''}" data-task="${t.id}" style="cursor:pointer"><span class="light ${completed?'green':andonLevel(t)}"></span><div style="flex:1;min-width:0"><b style="font-size:14px">${esc(t.title)}</b><div class="muted small">${esc(project?.name||'Standalone task')}${client?` · ${esc(client.company)}`:''}</div></div><span class="status-pill">${taskProgressLabel(t.progress)}</span></div>`;}).join('');
 
   const feed = S().activity.slice(0,8).map(a=>`
@@ -295,7 +301,7 @@ function viewDashboard(){
 function openMemberTaskDetails(memberId){
   const member=userById(memberId);if(!member)return;
   const now=Date.now(),sevenDaysAgo=now-(7*24*60*60*1000);
-  const memberTasks=S().tasks.filter(t=>t.ownerId===memberId);
+  const memberTasks=S().tasks.filter(t=>isTaskOwner(t,memberId));
   const isCompleted=t=>t.status==='done'||t.progress==='completed';
   const completed=memberTasks.filter(t=>isCompleted(t)&&(t.stageAt||t.createdAt||0)>=sevenDaysAgo).sort((a,b)=>(b.stageAt||b.createdAt||0)-(a.stageAt||a.createdAt||0));
   const pending=memberTasks.filter(t=>!isCompleted(t)).sort((a,b)=>(a.dueDate||Number.MAX_SAFE_INTEGER)-(b.dueDate||Number.MAX_SAFE_INTEGER));
@@ -339,7 +345,7 @@ async function bindDashboardCalendar(){
   if(googleCalendarConnected){
     const min=new Date(calendarCursor.getFullYear(),calendarCursor.getMonth()-1,20),max=new Date(calendarCursor.getFullYear(),calendarCursor.getMonth()+2,10);
     const range=`${min.toISOString()}|${max.toISOString()}`;if(googleCalendarRange===range)return;
-    try{const result=await Store.googleCalendarEvents(min.toISOString(),max.toISOString());googleCalendarEvents=result.events||[];googleCalendarRange=range;const node=$('#dashboard-calendar');if(node){node.outerHTML=dashboardCalendar(session.role==='team'?S().tasks.filter(t=>t.ownerId===session.id):S().tasks);bindDashboardCalendar();}}
+    try{const result=await Store.googleCalendarEvents(min.toISOString(),max.toISOString());googleCalendarEvents=result.events||[];googleCalendarRange=range;const node=$('#dashboard-calendar');if(node){node.outerHTML=dashboardCalendar(session.role==='team'?S().tasks.filter(t=>isTaskOwner(t,session.id)):S().tasks);bindDashboardCalendar();}}
     catch(error){googleCalendarConnected=false;toast(error.message);render();}
   }
 }
@@ -380,7 +386,7 @@ function projectTaskRow(index, task=null){
     <div class="project-task-head"><div class="project-task-number">${index+1}</div><div><b>${task?'Existing task':'New task'}</b><span>${task?'Update its details or assignment':'Define and assign this task'}</span></div><button class="btn-ghost small" type="button" data-remove-project-task>Remove</button></div>
     <div class="field"><label>Task title <span class="req">*</span></label><input data-pt-title value="${esc(task?.title||'')}" placeholder="e.g. Design homepage mockup"></div>
     <div class="form-row">
-      <div class="field"><label>Assign to <span class="req">*</span></label><select data-pt-owner><option value="">Select team member or admin</option>${members.map(u=>`<option value="${u.id}" ${u.id===task?.ownerId?'selected':''}>${assigneeLabel(u)}</option>`).join('')}</select></div>
+      <div class="field"><label>Assign to <span class="req">*</span></label><select data-pt-owner multiple size="4">${members.map(u=>`<option value="${u.id}" ${task&&isTaskOwner(task,u.id)?'selected':''}>${assigneeLabel(u)}</option>`).join('')}</select><div class="hint">Select one or more people.</div></div>
       <div class="field"><label>Priority</label><select data-pt-priority>${['low','med','high'].map(p=>`<option value="${p}" ${(task?.priority||'med')===p?'selected':''}>${p==='med'?'Medium':p[0].toUpperCase()+p.slice(1)}</option>`).join('')}</select></div>
     </div>
     <div class="form-row">
@@ -440,7 +446,7 @@ function openProjectForm(projectId=null){
     if(!name){toast('Enter a project name');return;}
     if(!rows.length){toast('Add at least one task');return;}
     if(rows.some(row=>row._reading>0)){toast('Please wait for attachments to finish loading');return;}
-    const invalid=rows.some(row=>!$('[data-pt-title]',row).value.trim()||!$('[data-pt-owner]',row).value||!$('[data-pt-dept]',row).value);
+    const invalid=rows.some(row=>!$('[data-pt-title]',row).value.trim()||!selectedValues($('[data-pt-owner]',row)).length||!$('[data-pt-dept]',row).value);
     if(invalid){toast('Every task needs a title, assignee and department');return;}
     const id=project?.id||'p_'+Math.random().toString(36).slice(2,9), clientId=$('#project-client',modal).value||null, now=Date.now();
     if(project) Object.assign(project,{clientId,name,desc:$('#project-desc',modal).value.trim(),dueDate:null});
@@ -449,7 +455,7 @@ function openProjectForm(projectId=null){
     const removedIds=projectTasks.filter(t=>!retainedIds.includes(t.id)).map(t=>t.id);
     S().tasks=S().tasks.filter(t=>!removedIds.includes(t.id));
     S().messages.forEach(m=>{if(removedIds.includes(m.taskId))m.taskId=null;});
-    rows.forEach(row=>{const owner=userById($('[data-pt-owner]',row).value);const existing=row.dataset.taskId?S().tasks.find(t=>t.id===row.dataset.taskId):null;const dueInput=$('[data-pt-due]',row).value;const values={projectId:id,clientId,title:$('[data-pt-title]',row).value.trim(),desc:$('[data-pt-desc]',row).value.trim(),dept:$('[data-pt-dept]',row).value,ownerId:owner.id,priority:$('[data-pt-priority]',row).value,progress:$('[data-pt-progress]',row).value,dueDate:dueInput?new Date(dueInput).getTime():null,attachments:row._attachments||[]};if(existing)Object.assign(existing,values);else S().tasks.push({id:'t_'+Math.random().toString(36).slice(2,9),...values,status:'todo',createdAt:now,stageAt:now,recurring:null});});
+    rows.forEach(row=>{const ownerIds=selectedValues($('[data-pt-owner]',row));const existing=row.dataset.taskId?S().tasks.find(t=>t.id===row.dataset.taskId):null;const dueInput=$('[data-pt-due]',row).value;const values={projectId:id,clientId,title:$('[data-pt-title]',row).value.trim(),desc:$('[data-pt-desc]',row).value.trim(),dept:$('[data-pt-dept]',row).value,ownerIds,ownerId:ownerIds[0],priority:$('[data-pt-priority]',row).value,progress:$('[data-pt-progress]',row).value,dueDate:dueInput?new Date(dueInput).getTime():null,attachments:row._attachments||[]};if(existing)Object.assign(existing,values);else S().tasks.push({id:'t_'+Math.random().toString(36).slice(2,9),...values,status:'todo',createdAt:now,stageAt:now,recurring:null});});
     try{const result=await Store.save();logActivity(`Project "${name}" ${editing?'updated':'created'} with ${rows.length} assigned task${rows.length===1?'':'s'}`,'brief');close();go('projects');toast(result.assignmentMailFailures?.length?'✅ Saved, but an assignment email could not be sent':editing?'✅ Project updated':'✅ Project and tasks created — assignment email sent');}catch(error){await Store.load();render();toast(error.message);}
   };
 }
@@ -468,15 +474,16 @@ function andonRow(t){
   const lvl = andonLevel(t);
   const owner = userById(t.ownerId);
   const c = clientById(t.clientId);
+  const project = projectById(t.projectId);
   return `<div class="andon-row ${lvl}" data-task="${t.id}">
     <span class="light ${lvl}"></span>
-    <div class="a-main"><b>${esc(t.title)}</b><span>${c?`${esc(c.company)} · `:''}${t.dept} · ${owner?esc(owner.name):'Unassigned'}</span></div>
+    <div class="a-main">${project?`<span class="andon-project-name">📌 ${esc(project.name)}</span>`:''}<b>${esc(t.title)}</b><span>${c?`${esc(c.company)} · `:''}${t.dept} · ${owner?esc(owner.name):'Unassigned'}</span></div>
     <span class="status-pill st-${t.status}">${t.status.replace('_',' ')}</span>
     <span class="timer ${lvl==='green'?'':lvl}" data-timer="${t.id}">${fmtElapsed(t)}</span>
   </div>`;
 }
 function viewAndon(){
-  const scope = session.role==='team' ? S().tasks.filter(t=>t.ownerId===session.id) : S().tasks;
+  const scope = session.role==='team' ? S().tasks.filter(t=>isTaskOwner(t,session.id)) : S().tasks;
   const active = scope.filter(t=>ACTIVE.includes(t.status) && t.progress!=='completed')
     .sort((a,b)=> elapsedMs(b)-elapsedMs(a));
   const {amberMin, redMin} = S().settings;
@@ -505,7 +512,7 @@ const COLS = [
 ];
 const WIP = {in_progress:4, review:3};
 function kcard(t){
-  const owner = userById(t.ownerId);
+  const owners = taskOwners(t);
   const dc = departmentColor(t.dept);
   const lvl = andonLevel(t);
   return `<div class="kcard" data-task="${t.id}">
@@ -516,14 +523,14 @@ function kcard(t){
     </div>
     <b>${esc(t.title)}</b>
     <div class="kc-foot">
-      ${owner?avatar(owner):'<span class="muted small">Unassigned</span>'}
+      ${owners.length?owners.map(owner=>avatar(owner)).join(''):'<span class="muted small">Unassigned</span>'}
       <span class="prio ${t.priority}">${t.priority}</span>
     </div>
   </div>`;
 }
 function viewKanban(){
   let scope = S().tasks;
-  if (session.role==='team') scope = scope.filter(t=>t.ownerId===session.id);
+  if (session.role==='team') scope = scope.filter(t=>isTaskOwner(t,session.id));
   const cols = COLS.map(col=>{
     const items = tasksByProjectName(scope.filter(t=>t.status===col.id));
     const wip = WIP[col.id];
@@ -732,8 +739,8 @@ function viewTeam(){
   const team = S().users.filter(u=>u.role==='team');
   const rows = team.map(u=>{
     const load=activeLoad(u.id);
-    const done=S().tasks.filter(t=>t.ownerId===u.id&&t.status==='done').length;
-    const red=S().tasks.filter(t=>t.ownerId===u.id&&andonLevel(t)==='red').length;
+    const done=S().tasks.filter(t=>isTaskOwner(t,u.id)&&t.status==='done').length;
+    const red=S().tasks.filter(t=>isTaskOwner(t,u.id)&&andonLevel(t)==='red').length;
     return `<div class="row-item">
       ${avatar(u)}
       <div style="flex:1"><b style="font-size:14px">${esc(u.name)}</b><div class="muted small">${esc(u.dept)} Department</div><div class="muted small">${esc(u.email || 'No email')} · ${esc(u.phone || 'No phone')}</div></div>
@@ -757,28 +764,32 @@ function openTeamMember(memberId=null){
         <div class="field"><label>Phone <span class="req">*</span></label><input id="tm-phone" type="tel" value="${esc(member?.phone || '')}" placeholder="+91 98765 43210"></div>
       </div>
       <div class="field"><label>Department <span class="req">*</span></label><select id="tm-dept">${departments().map(d=>`<option value="${esc(d.name)}" ${member?.dept===d.name?'selected':''}>${esc(d.name)}</option>`).join('')}</select></div>
-      ${member?'':passwordField('tm-password')}
+      <div class="field"><label>Profile image <span class="muted small">(optional)</span></label><div class="member-image-field"><div id="tm-image-preview">${member?avatar(member):'<span class="avatar">＋</span>'}</div><input id="tm-image" type="file" accept="image/jpeg,image/png,image/gif,image/webp"><span class="field-hint">JPG, PNG, GIF or WebP up to 2 MB.${member?.image?' Leave empty to keep the current image.':''}</span></div></div>
+      ${passwordField('tm-password',!member)}
+      ${member?'<div class="hint">Leave the password empty to keep the current password.</div>':''}
     </div><div class="modal-foot"><button class="btn-ghost" data-close>Cancel</button><button class="btn" id="tm-save">${member?'Save changes':'Add member'}</button></div></div>`;
   $('#modal-host').appendChild(modal);
   bindPasswordTools(modal);
+  let imageFile=null;$('#tm-image',modal).onchange=e=>{const file=e.target.files[0];if(!file)return;if(file.size>2*1024*1024){toast('Profile image must be 2 MB or smaller');e.target.value='';return;}imageFile=file;$('#tm-image-preview',modal).innerHTML=`<span class="avatar"><img src="${URL.createObjectURL(file)}" alt="Image preview"></span>`;};
   modal.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>modal.remove());
   modal.onclick=e=>{if(e.target===modal)modal.remove();};
   $('#tm-save').onclick=async()=>{
     const name=$('#tm-name').value.trim(), email=$('#tm-email').value.trim(), phone=$('#tm-phone').value.trim(), dept=$('#tm-dept').value;
-    const password=member?'':$('#tm-password',modal).value;if(!name || !email || !phone || !dept || (!member&&!password)){ toast('Name, email, phone, department and password are required'); return; }
-    if(!member&&password.length<8){toast('Password must be at least 8 characters');return;}
+    const password=$('#tm-password',modal).value;if(!name || !email || !phone || !dept || (!member&&!password)){ toast('Name, email, phone, department and password are required'); return; }
+    if(password&&password.length<8){toast('Password must be at least 8 characters');return;}
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ toast('Enter a valid email address'); return; }
     if(S().users.some(u=>u.id!==memberId && u.email && u.email.toLowerCase()===email.toLowerCase())){ toast('That email is already in use'); return; }
     const previous = member ? {...member} : null;
     const added = member ? null : {id:'u_'+Math.random().toString(36).slice(2,9),name,email,phone,dept,role:'team',roleId:2,password,color:departmentColor(dept).fg};
-    if(member) Object.assign(member,{name,email,phone,dept});
+    if(member) Object.assign(member,{name,email,phone,dept},password?{password}:{});
     else S().users.push(added);
     const saveButton = $('#tm-save');
     saveButton.disabled = true; saveButton.textContent = 'Saving…';
     try {
-      const result=await Store.save();S().users.forEach(u=>delete u.password);modal.remove();render();toast(member?'✅ Team member updated':result.mailFailures?.length?'✅ Team member added, but the login email could not be sent':'✅ Team member added — login email sent');
+      if(imageFile)(member||added).image=await Store.uploadTeamMemberImage(imageFile);
+      const result=await Store.save();S().users.forEach(u=>delete u.password);modal.remove();render();toast(member?(password?(result?.mailFailures?.length?'✅ Password updated, but a login email could not be sent':'✅ Team member updated — login emails sent to member and admin'):'✅ Team member updated'):result?.mailFailures?.length?'✅ Team member added, but a login email could not be sent':'✅ Team member added — login emails sent to member and admin');
     } catch (error) {
-      if(member) Object.assign(member, previous);
+      if(member){delete member.password;delete member.image;Object.assign(member,previous);}
       else S().users = S().users.filter(u=>u.id!==added.id);
       saveButton.disabled = false; saveButton.textContent = member?'Save changes':'Add member';
       toast(`Could not save team member: ${error.message}`);
@@ -789,7 +800,7 @@ function openTeamMember(memberId=null){
 async function deleteTeamMember(memberId){
   const member=userById(memberId); if(!member) return;
   if(!confirm(`Delete ${member.name}? Their assigned tasks will become unassigned.`)) return;
-  S().tasks.forEach(t=>{ if(t.ownerId===memberId) t.ownerId=null; });
+  S().tasks.forEach(t=>{t.ownerIds=taskOwnerIds(t).filter(id=>id!==memberId);t.ownerId=t.ownerIds[0]||null;});
   S().users=S().users.filter(u=>u.id!==memberId);
   await Store.save(); render(); toast('🗑️ Team member deleted');
 }
@@ -883,7 +894,7 @@ function viewMessages(){
 function renderChat(msgs){
   if (!msgs.length) return '<div class="empty" style="padding:30px"><div class="e-ic">💬</div>No messages yet</div>';
   return `<div class="chat">${msgs.map(m=>{
-    const out = session.role!=='client' ? m.fromRole!=='client' : m.fromRole==='client';
+    const out = m.fromId===session.id;
     const u = userById(m.fromId);
     const body = `${m.text?`<div>${esc(m.text)}</div>`:''}${m.voice?`<div class="voice-note">🎤 <audio controls src="${m.voice}"></audio></div>`:''}${renderMessageAttachments(m.attachments)}`;
     return `<div class="msg ${out?'out':''}">
@@ -938,6 +949,7 @@ async function toggleRecord(btn, onDone){
 ============================================================ */
 async function sendMessage(clientId, taskId, text, voice, attachments=[]){
   if (!text && !voice && !attachments.length) return;
+  clientId=clientById(clientId)?.id||null;
   const msg = { id:Math.random().toString(36).slice(2,9), clientId, taskId:taskId||null, fromId:session.id, fromRole:session.role==='client'?'client':'team', text:text||'', voice:voice||null, attachments, at:Date.now() };
   S().messages.push(msg);
   try{await Store.save();}catch(error){S().messages=S().messages.filter(m=>m.id!==msg.id);throw error;}
@@ -948,15 +960,17 @@ async function sendMessage(clientId, taskId, text, voice, attachments=[]){
     Notify.both({ phone:'+91 agency-team', email:'team@antrajaal.com',
       waText:`💬 New message from ${clientName} (${company}): "${voice?'🎤 voice note':attachments.length?'📎 attachment':text}"`,
       emailText:`Subject: New message from ${company}` });
-  } else {
+  } else if (c) {
     try {
       await Store.sendChatEmail({clientId,taskId:taskId||null,text:text||null,hasVoice:!!voice,attachmentNames:attachments.map(a=>a.name)});
       toast(`✉️ Email sent to ${c?.email||'client'}`);
     } catch (error) {
       toast(error.message);
     }
+  } else {
+    toast('✅ Message sent');
   }
-  render();
+  if(taskId){document.querySelectorAll('.modal-scrim').forEach(modal=>modal.remove());openTask(taskId);}else render();
   return true;
 }
 
@@ -1007,16 +1021,16 @@ function openTeamTaskForm(){
   const modal=document.createElement('div');modal.className='modal-scrim';
   modal.innerHTML=`<div class="modal project-modal"><div class="modal-head"><div><h2>Add task</h2><p class="muted small">Create a task and assign it to yourself or an admin.</p></div><button class="btn-ghost" data-close>✕</button></div><div class="modal-body"><div class="form-row"><div class="field"><label>Client</label><select id="team-task-client">${clientOpts}</select></div><div class="field"><label>Project</label><select id="team-task-project">${projectOpts}</select></div></div><div id="team-task-fields">${projectTaskRow(0)}</div></div><div class="modal-foot"><button class="btn-ghost" data-close>Cancel</button><button class="btn" id="save-team-task">Create task</button></div></div>`;
   $('#modal-host').appendChild(modal);const close=()=>modal.remove();modal.querySelectorAll('[data-close]').forEach(b=>b.onclick=close);modal.onclick=e=>{if(e.target===modal)close();};
-  const row=$('[data-project-task]',modal);$('[data-remove-project-task]',row)?.remove();const owner=$('[data-pt-owner]',row);[...owner.options].forEach(option=>{const user=userById(option.value);if(user&&user.role!=='admin'&&user.id!==session.id)option.remove();});owner.value=session.id;bindProjectTaskFiles($('#team-task-fields',modal));
+  const row=$('[data-project-task]',modal);$('[data-remove-project-task]',row)?.remove();const owner=$('[data-pt-owner]',row);[...owner.options].forEach(option=>option.selected=option.value===session.id);bindProjectTaskFiles($('#team-task-fields',modal));
   $('#team-task-project',modal).onchange=e=>{const option=e.target.selectedOptions[0];if(option?.dataset.clientId)$('#team-task-client',modal).value=option.dataset.clientId;};
   $('#save-team-task',modal).onclick=async()=>{
-    const title=$('[data-pt-title]',row).value.trim(),assignee=userById(owner.value);if(!title){toast('Enter a task title');return;}if(!assignee){toast('Select yourself or an admin');return;}if(row._reading>0){toast('Please wait for attachments to finish loading');return;}
+    const title=$('[data-pt-title]',row).value.trim(),ownerIds=selectedValues(owner),assignees=ownerIds.map(userById).filter(Boolean);if(!title){toast('Enter a task title');return;}if(!assignees.length){toast('Select at least one assignee');return;}if(row._reading>0){toast('Please wait for attachments to finish loading');return;}
     const now=Date.now();
     const projectId=$('#team-task-project',modal).value||null,linkedProject=projectById(projectId);
     const dueInput=$('[data-pt-due]',row).value;
     const dept=$('[data-pt-dept]',row).value;if(!dept){toast('Select a department');return;}
-    const task={id:'t_'+Math.random().toString(36).slice(2,9),projectId,clientId:linkedProject?.clientId||$('#team-task-client',modal).value||null,title,desc:$('[data-pt-desc]',row).value.trim(),dept,ownerId:assignee.id,status:'todo',priority:$('[data-pt-priority]',row).value,progress:$('[data-pt-progress]',row).value,createdAt:now,stageAt:now,dueDate:dueInput?new Date(dueInput).getTime():null,recurring:null,attachments:row._attachments||[]};
-    S().tasks.push(task);try{const result=await Store.save();logActivity(`${session.name} created "${title}" and assigned it to ${assignee.name}`,'brief');close();render();buildNav();toast(result.assignmentMailFailures?.length?`✅ Task assigned to ${assignee.name}, but the email could not be sent`:`✅ Task assigned to ${assignee.name}${session.role==='admin'&&assignee.role==='team'?' — email sent':''}`);}catch(error){await Store.load();render();toast(error.message);}
+    const task={id:'t_'+Math.random().toString(36).slice(2,9),projectId,clientId:linkedProject?.clientId||$('#team-task-client',modal).value||null,title,desc:$('[data-pt-desc]',row).value.trim(),dept,ownerIds,ownerId:ownerIds[0],status:'todo',priority:$('[data-pt-priority]',row).value,progress:$('[data-pt-progress]',row).value,createdAt:now,stageAt:now,dueDate:dueInput?new Date(dueInput).getTime():null,recurring:null,attachments:row._attachments||[]};
+    const assigneeNames=assignees.map(u=>u.name).join(', ');S().tasks.push(task);try{const result=await Store.save();logActivity(`${session.name} created "${title}" and assigned it to ${assigneeNames}`,'brief');close();render();buildNav();toast(result.assignmentMailFailures?.length?`✅ Task assigned, but an email could not be sent`:`✅ Task assigned to ${assigneeNames}`);}catch(error){await Store.load();render();toast(error.message);}
   };
 }
 
@@ -1026,9 +1040,9 @@ function openTeamTaskForm(){
 function openTask(id){
   const t = S().tasks.find(x=>x.id===id); if(!t) return;
   const c=clientById(t.clientId);
-  const canManage = session.role==='admin' || (session.role==='team' && t.ownerId===session.id);
+  const canManage = session.role==='admin' || (session.role==='team' && isTaskOwner(t,session.id));
   const msgs = S().messages.filter(m=>m.taskId===t.id).sort((a,b)=>a.at-b.at);
-  const teamOpts = `<option value="">Unassigned</option>`+assignableStaff().map(u=>`<option value="${u.id}" ${u.id===t.ownerId?'selected':''}>${assigneeLabel(u)}</option>`).join('');
+  const teamOpts = assignableStaff().map(u=>`<option value="${u.id}" ${isTaskOwner(t,u.id)?'selected':''}>${assigneeLabel(u)}</option>`).join('');
   const clientOpts=`<option value="" ${t.clientId?'':'selected'}>No client</option>`+S().clients.map(client=>`<option value="${client.id}" ${client.id===t.clientId?'selected':''}>${esc(client.company)}</option>`).join('');
   const projectOpts=`<option value="" ${t.projectId?'':'selected'}>No project</option>`+(S().projects||[]).map(project=>`<option value="${project.id}" data-client-id="${project.clientId||''}" ${project.id===t.projectId?'selected':''}>${esc(project.name)}</option>`).join('');
   const lvl=andonLevel(t);
@@ -1039,7 +1053,7 @@ function openTask(id){
     <div class="form-row" style="margin-top:8px">
       <div class="field"><label>Status / stage</label>
         <select id="m-status">${COLS.map(col=>`<option value="${col.id}" ${t.status===col.id?'selected':''}>${col.label}</option>`).concat(`<option value="blocked" ${t.status==='blocked'?'selected':''}>⛔ Blocked</option>`).join('')}</select></div>
-      <div class="field"><label>Owner (accountable)</label>${session.role==='admin'?`<select id="m-owner">${teamOpts}</select>`:`<div class="assignment-note compact">${avatar(session)}<div><b>${esc(session.name)}</b><span>Assigned to you</span></div></div>`}</div>
+      <div class="field"><label>Assign to</label><select id="m-owner" multiple size="4">${teamOpts}</select><div class="hint">Select one or more people.</div></div>
     </div>
     <div class="form-row">
       <div class="field"><label>Priority</label><select id="m-prio">${['low','med','high'].map(p=>`<option ${t.priority===p?'selected':''}>${p}</option>`).join('')}</select></div>
@@ -1081,7 +1095,7 @@ function openTask(id){
       if (ns==='done'&&c){ Notify.both({phone:c.phone,email:c.email,waText:`🎉 Good news ${c.name}! "${t.title}" is completed. Please review.`,emailText:`Subject: Completed — ${t.title}`}); }
     }
     t.title=$('#m-title').value.trim();if(!t.title){toast('Task title is required');return;}t.desc=$('#m-desc').value.trim();t.status=ns;t.priority=$('#m-prio').value;t.progress=$('#m-progress').value;
-    if(session.role==='admin'){const projectId=$('#m-project',modal).value||null,project=projectById(projectId);t.projectId=projectId;t.clientId=project?.clientId||$('#m-client',modal).value||null;t.ownerId=$('#m-owner').value||null;t.dept=$('#m-dept').value;t.dueDate=$('#m-due').value?new Date($('#m-due').value).getTime():null;}else{t.ownerId=session.id;t.dept=session.dept;t.dueDate=$('#m-due').value?new Date($('#m-due').value).getTime():null;}
+    const ownerIds=selectedValues($('#m-owner',modal));if(!ownerIds.length){toast('Select at least one assignee');return;}t.ownerIds=ownerIds;t.ownerId=ownerIds[0];if(session.role==='admin'){const projectId=$('#m-project',modal).value||null,project=projectById(projectId);t.projectId=projectId;t.clientId=project?.clientId||$('#m-client',modal).value||null;t.dept=$('#m-dept').value;t.dueDate=$('#m-due').value?new Date($('#m-due').value).getTime():null;}else{t.dueDate=$('#m-due').value?new Date($('#m-due').value).getTime():null;}
     try{await Store.save();modal.remove();render();buildNav();toast('✅ Task updated');}catch(error){await Store.load();render();toast(error.message);}
   };
   const deleteBtn=modal.querySelector('[data-delete-task]');if(deleteBtn)deleteBtn.onclick=()=>deleteTask(t.id,modal);
@@ -1089,7 +1103,7 @@ function openTask(id){
 
 async function deleteTask(taskId,modal=null){
   const task=S().tasks.find(t=>t.id===taskId);if(!task)return;
-  if(session.role!=='admin' && !(session.role==='team'&&task.ownerId===session.id))return;
+  if(session.role!=='admin' && !(session.role==='team'&&isTaskOwner(task,session.id)))return;
   if(!confirm(`Delete "${task.title}"? This cannot be undone.`))return;
   S().tasks=S().tasks.filter(t=>t.id!==taskId);S().messages.forEach(m=>{if(m.taskId===taskId)m.taskId=null;});
   try{await Store.save();modal?.remove();render();buildNav();toast('🗑️ Task deleted');}catch(error){await Store.load();render();toast(error.message);}
@@ -1099,14 +1113,14 @@ async function deleteTask(taskId,modal=null){
    TASKS
 ============================================================ */
 function viewTasks(){
-  const all=tasksByProjectName(session.role==='team'?S().tasks.filter(t=>t.ownerId===session.id):S().tasks),pageSize=10,totalPages=Math.max(1,Math.ceil(all.length/pageSize));tasksPage=Math.min(Math.max(1,tasksPage),totalPages);
-  const cards=all.slice((tasksPage-1)*pageSize,tasksPage*pageSize).map(t=>{const client=clientById(t.clientId),project=projectById(t.projectId),owner=userById(t.ownerId),completed=t.status==='done'||t.progress==='completed';return `<article class="task-card ${completed?'task-row-completed':''}" data-task="${t.id}">
+  const all=tasksByProjectName(session.role==='team'?S().tasks.filter(t=>isTaskOwner(t,session.id)):S().tasks),pageSize=10,totalPages=Math.max(1,Math.ceil(all.length/pageSize));tasksPage=Math.min(Math.max(1,tasksPage),totalPages);
+  const cards=all.slice((tasksPage-1)*pageSize,tasksPage*pageSize).map(t=>{const client=clientById(t.clientId),project=projectById(t.projectId),owners=taskOwners(t),completed=t.status==='done'||t.progress==='completed';return `<article class="task-card ${completed?'task-row-completed':''}" data-task="${t.id}">
     <div class="task-card-head"><span class="status-pill">${taskProgressLabel(t.progress)}</span><div class="project-actions"><button class="project-menu-btn" data-task-menu="${t.id}" aria-label="Task actions" aria-expanded="false">⋮</button><div class="project-menu hidden" data-task-menu-popup="${t.id}">${completed?'<button disabled><span>✓</span>Completed</button>':`<button data-complete-task="${t.id}"><span>✓</span>Mark completed</button>`}<button data-edit-task="${t.id}"><span>✏️</span>Edit task</button><button class="danger" data-delete-task="${t.id}"><span>🗑️</span>Delete task</button></div></div></div>
     ${client?`<div class="project-client">${esc(client.company)}</div>`:''}<h3>${esc(t.title)}</h3>
     <div class="task-project"><span>📌</span><div><small>Project</small><b>${esc(project?.name||'Standalone task')}</b></div></div>
     <p>${esc(t.desc||'No task description')}</p>
     ${t.dueDate&&!completed?`<div class="task-due-countdown ${t.dueDate<Date.now()?'overdue':''}" data-due-countdown="${t.dueDate}">⏳ ${dueCountdown(t.dueDate)}</div>`:''}
-    <div class="task-card-foot"><span>${owner?avatar(owner):''}<span><small>Assigned to</small><b>${owner?esc(owner.name):'Unassigned'}</b></span></span>${t.dueDate?`<time><small>Due</small><b>${new Date(t.dueDate).toLocaleDateString()}</b></time>`:''}</div>
+    <div class="task-card-foot"><span>${owners.map(owner=>avatar(owner)).join('')}<span><small>Assigned to</small><b>${owners.length?esc(owners.map(owner=>owner.name).join(', ')):'Unassigned'}</b></span></span>${t.dueDate?`<time><small>Due</small><b>${new Date(t.dueDate).toLocaleDateString()}</b></time>`:''}</div>
   </article>`;}).join('');
   const pagination=totalPages>1?`<div class="section-head" style="margin-top:14px"><button class="btn-ghost small" data-tasks-page="${tasksPage-1}" ${tasksPage===1?'disabled':''}>← Previous</button><span class="muted small">Page ${tasksPage} of ${totalPages} · ${all.length} tasks</span><button class="btn-ghost small" data-tasks-page="${tasksPage+1}" ${tasksPage===totalPages?'disabled':''}>Next →</button></div>`:'';
   return `<div class="section-head"><p class="muted">${session.role==='team'?'View and complete tasks assigned to you.':'Create and manage individual tasks across clients and projects.'}</p><button class="btn" ${session.role==='team'?'data-add-team-task':'data-new-task'}>+ New task</button></div><div class="task-card-grid">${cards||'<div class="empty"><div class="e-ic">✅</div>No tasks yet</div>'}</div>${pagination}`;
@@ -1114,7 +1128,7 @@ function viewTasks(){
 
 async function completeTask(taskId){
   const task=S().tasks.find(t=>t.id===taskId);if(!task)return;
-  if(session.role!=='admin'&&!(session.role==='team'&&task.ownerId===session.id))return;
+  if(session.role!=='admin'&&!(session.role==='team'&&isTaskOwner(task,session.id)))return;
   if(task.status==='done'||task.progress==='completed')return;
   const previous={status:task.status,progress:task.progress,stageAt:task.stageAt};
   task.status='done';task.progress='completed';task.stageAt=Date.now();
@@ -1129,7 +1143,7 @@ function openNewTask(){
   $('#modal-host').appendChild(modal);const close=()=>modal.remove();modal.querySelectorAll('[data-close]').forEach(b=>b.onclick=close);modal.onclick=e=>{if(e.target===modal)close();};
   const row=$('[data-project-task]',modal);$('[data-remove-project-task]',row)?.remove();bindProjectTaskFiles($('#new-task-fields',modal));
   $('#task-project',modal).onchange=e=>{const clientId=e.target.selectedOptions[0]?.dataset.clientId;if(clientId)$('#task-client',modal).value=clientId;};
-  $('#create-task',modal).onclick=async()=>{const title=$('[data-pt-title]',row).value.trim(),owner=userById($('[data-pt-owner]',row).value),dept=$('[data-pt-dept]',row).value;if(!title){toast('Enter a task title');return;}if(!owner){toast('Select a team member or admin');return;}if(!dept){toast('Select a department');return;}if(row._reading>0){toast('Please wait for attachments to finish loading');return;}const projectId=$('#task-project',modal).value||null,project=projectById(projectId),clientId=project?.clientId||$('#task-client',modal).value||null,now=Date.now(),dueInput=$('[data-pt-due]',row).value;S().tasks.push({id:'t_'+Math.random().toString(36).slice(2,9),projectId,clientId,title,desc:$('[data-pt-desc]',row).value.trim(),dept,ownerId:owner.id,status:'todo',priority:$('[data-pt-priority]',row).value,progress:$('[data-pt-progress]',row).value,createdAt:now,stageAt:now,dueDate:dueInput?new Date(dueInput).getTime():null,recurring:null,attachments:row._attachments||[]});try{const result=await Store.save();close();go('tasks');toast(result.assignmentMailFailures?.length?'✅ Task created, but the assignment email could not be sent':`✅ Task created${owner.role==='team'?' — assignment email sent':''}`);}catch(error){await Store.load();render();toast(error.message);}};
+  $('#create-task',modal).onclick=async()=>{const title=$('[data-pt-title]',row).value.trim(),ownerIds=selectedValues($('[data-pt-owner]',row)),dept=$('[data-pt-dept]',row).value;if(!title){toast('Enter a task title');return;}if(!ownerIds.length){toast('Select at least one assignee');return;}if(!dept){toast('Select a department');return;}if(row._reading>0){toast('Please wait for attachments to finish loading');return;}const projectId=$('#task-project',modal).value||null,project=projectById(projectId),clientId=project?.clientId||$('#task-client',modal).value||null,now=Date.now(),dueInput=$('[data-pt-due]',row).value;S().tasks.push({id:'t_'+Math.random().toString(36).slice(2,9),projectId,clientId,title,desc:$('[data-pt-desc]',row).value.trim(),dept,ownerIds,ownerId:ownerIds[0],status:'todo',priority:$('[data-pt-priority]',row).value,progress:$('[data-pt-progress]',row).value,createdAt:now,stageAt:now,dueDate:dueInput?new Date(dueInput).getTime():null,recurring:null,attachments:row._attachments||[]});try{const result=await Store.save();close();go('tasks');toast(result.assignmentMailFailures?.length?'✅ Task created, but an assignment email could not be sent':'✅ Task created and assigned');}catch(error){await Store.load();render();toast(error.message);}};
 }
 
 
@@ -1142,14 +1156,14 @@ function openNewRecurring(taskId=null){
   const editing=!!task;
   const clientOpts=`<option value="">No client</option>`+S().clients.map(c=>`<option value="${c.id}" ${task?.clientId===c.id?'selected':''}>${esc(c.company)}</option>`).join('');
   const projectOpts=`<option value="">No project</option>`+(S().projects||[]).map(p=>`<option value="${p.id}" data-client-id="${p.clientId||''}" ${task?.projectId===p.id?'selected':''}>${esc(p.name)}${p.clientId?` · ${esc(clientById(p.clientId)?.company||'No client')}`:''}</option>`).join('');
-  const memberOpts=assignableStaff().map(u=>`<option value="${u.id}" ${task?.ownerId===u.id?'selected':''}>${assigneeLabel(u)}</option>`).join('');
+  const memberOpts=assignableStaff().map(u=>`<option value="${u.id}" ${task&&isTaskOwner(task,u.id)?'selected':''}>${assigneeLabel(u)}</option>`).join('');
   const modal=document.createElement('div'); modal.className='modal-scrim';
   modal.innerHTML=`<div class="modal"><div class="modal-head"><h2>${editing?'Edit':'New'} repeating task</h2><button class="btn-ghost" data-close>✕</button></div>
     <div class="modal-body">
       <div class="field"><label>Title</label><input id="rc-title" value="${esc(task?.title||'')}" placeholder="e.g. Weekly Instagram carousel"></div>
       <div class="form-row"><div class="field"><label>Client</label><select id="rc-client">${clientOpts}</select></div><div class="field"><label>Project</label><select id="rc-project">${projectOpts}</select></div></div>
       <div class="form-row">
-        <div class="field"><label>Assign to</label><select id="rc-owner"><option value="">Select team member or admin</option>${memberOpts}</select></div>
+        <div class="field"><label>Assign to</label><select id="rc-owner" multiple size="4">${memberOpts}</select><div class="hint">Select one or more people.</div></div>
         <div class="field"><label>Repeats</label><select id="rc-freq"><option value="daily" ${task?.recurring==='daily'?'selected':''}>Daily</option><option value="alternate_days" ${task?.recurring==='alternate_days'?'selected':''}>Alternate Days</option><option value="weekly" ${!task||task.recurring==='weekly'?'selected':''}>Weekly</option><option value="monthly" ${task?.recurring==='monthly'?'selected':''}>Monthly</option></select></div>
       </div>
       <div class="form-row">
@@ -1164,12 +1178,12 @@ function openNewRecurring(taskId=null){
   $('#rc-project',modal).onchange=e=>{const clientId=e.target.selectedOptions[0]?.dataset.clientId;if(clientId)$('#rc-client',modal).value=clientId;};
   $('#rc-save').onclick=async()=>{
     const title=$('#rc-title').value.trim(); if(!title){toast('Add a title');return;}
-    const owner=userById($('#rc-owner').value); if(!owner){toast('Select a team member or admin');return;}
+    const ownerIds=selectedValues($('#rc-owner',modal)),owners=ownerIds.map(userById).filter(Boolean);if(!owners.length){toast('Select at least one assignee');return;}
     const projectId=$('#rc-project',modal).value||null,project=projectById(projectId),clientId=project?.clientId||$('#rc-client',modal).value||null;
     const frequency=$('#rc-freq').value,now=Date.now();let nextRecurrenceAt=task?.nextRecurrenceAt;
     if(!editing||frequency!==task.recurring||!nextRecurrenceAt){const nextDate=new Date(now);if(frequency==='monthly'){const day=nextDate.getDate();nextDate.setDate(1);nextDate.setMonth(nextDate.getMonth()+1);nextDate.setDate(Math.min(day,new Date(nextDate.getFullYear(),nextDate.getMonth()+1,0).getDate()));}else nextDate.setDate(nextDate.getDate()+({daily:1,alternate_days:2,weekly:7}[frequency]));nextRecurrenceAt=nextDate.getTime();}
     const dueInput=$('#rc-due',modal).value;
-    const values={projectId,clientId,title,dept:owner.dept||'General',ownerId:owner.id,dueDate:dueInput?new Date(dueInput).getTime():null,progress:$('#rc-progress',modal).value,recurring:frequency,nextRecurrenceAt};
+    const values={projectId,clientId,title,dept:owners[0].dept||'General',ownerIds,ownerId:ownerIds[0],dueDate:dueInput?new Date(dueInput).getTime():null,progress:$('#rc-progress',modal).value,recurring:frequency,nextRecurrenceAt};
     if(editing)Object.assign(task,values);else S().tasks.push({id:Math.random().toString(36).slice(2,9),...values,desc:'Repeating task',status:'todo',priority:'med',progress:'just_started',createdAt:now,stageAt:now});
     try{await Store.save();modal.remove();render();toast(editing?'✅ Repeating task updated':'🔁 Repeating task created');}catch(error){await Store.load();render();toast(error.message);}
   };
