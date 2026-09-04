@@ -1,0 +1,263 @@
+Current phase verification (SQLite / Node; MySQL and browser not run)
+php artisan test
+
+   WARN  Tests\Feature\TaskApiTest
+  ✓ create get update and preserve unrelated fields                                                              0.27s  
+  ✓ missing tasks return 404                                                                                     0.04s  
+  ✓ status and progress values and endpoint isolation                                                            0.09s  
+  ✓ single multiple legacy and invalid assignees                                                                 0.07s  
+  ✓ authorization for assigned team clients and guests                                                           0.06s  
+  ✓ relationships recurrence and attachments                                                                     0.05s  
+  ✓ delete retains conversation and other tasks                                                                  0.04s  
+  ✓ existing state routes and state task serialization                                                           0.04s  
+  ✓ assignment mail reassignment and history are idempotent                                                      0.06s  
+  ✓ completion and client brief notifications are persisted not sent                                             0.04s  
+  ✓ fresh state save and stale api update create delete protection                                               0.09s  
+  ✓ state reassignment is ignored without sending mail                                                           0.08s  
+  ✓ recurring generation keeps schema values and invalidates state                                               0.04s  
+  ✓ unsafe attachment data and task ids are rejected                                                             0.04s  
+  ✓ mail failure does not rollback task or history                                                               0.05s  
+  ✓ team creation and unassigned admin validation                                                                0.04s  
+  ✓ all task routes require a valid session                                                                      0.04s  
+  - mysql mutex blocks other connections and releases after rollback → Requires the guarded dedicated MySQL tes… 0.04s  
+  ✓ atomic multi field edit and completion                                                                       0.04s  
+  ✓ task effect failure rolls back task and email                                                                0.04s  
+  ✓ project grid creates edits assigns and deletes atomically                                                    0.07s  
+  ✓ project grid later failure rolls back earlier rows and emails                                                0.04s  
+  ✓ project grid rejects foreign task and stale revision                                                         0.05s  
+  ✓ voice brief creates message task history and notifications together                                          0.04s  
+  ✓ voice brief message failure rolls back all side effects                                                      0.04s  
+  ✓ voice brief validates voice and uses client authorization                                                    0.04s  
+  ✓ project deletion rolls back on failure then detaches messages                                                0.06s  
+  ✓ client profile project link and unlink update all tasks                                                      0.06s  
+  ✓ client profile link failure rolls back profile login and tasks                                               0.05s  
+  ✓ client deletion is atomic for projects tasks messages and accounts                                           0.07s  
+  ✓ member removal is atomic and preserves other owners without email                                            0.07s  
+  ✓ department rename rollback and deletion fallback                                                             0.09s  
+  ✓ state ignores missing forged or empty tasks and preserves foreign keys                                       0.17s  
+  ✓ compound routes reject team clients and guests                                                               0.09s  
+  ✓ client creation is atomic with login and project link                                                        0.71s  
+  - mysql json milliseconds and nested advisory lock → Requires the guarded dedicated MySQL test configuration.  0.03s  
+
+  Tests:    2 skipped, 34 passed (335 assertions)
+  Duration: 3.12s
+
+
+node --test tests/js/*.test.cjs
+✔ assets/js/store.js: create project grid makes one request and adopts authoritative state (4.0375ms)
+✔ assets/js/store.js: edit project grid makes one request and adopts authoritative state (1.3818ms)
+✔ assets/js/store.js: delete project makes one request and adopts authoritative state (2.9227ms)
+✔ assets/js/store.js: create client and link project makes one request and adopts authoritative state (2.0212ms)
+✔ assets/js/store.js: edit client and link project makes one request and adopts authoritative state (2.1468ms)
+✔ assets/js/store.js: delete client makes one request and adopts authoritative state (2.0919ms)
+✔ assets/js/store.js: remove member makes one request and adopts authoritative state (2.1238ms)
+✔ assets/js/store.js: create department makes one request and adopts authoritative state (2.3923ms)
+✔ assets/js/store.js: rename department makes one request and adopts authoritative state (2.4928ms)
+✔ assets/js/store.js: delete department makes one request and adopts authoritative state (1.9722ms)
+✔ assets/js/store.js: voice brief makes one request and adopts authoritative state (2.8818ms)
+✔ assets/js/store.js: failed compound 403 preserves local records (3.1075ms)
+✔ assets/js/store.js: failed compound 404 preserves local records (2.2391ms)
+✔ assets/js/store.js: failed compound 409 preserves local records (2.092ms)
+✔ assets/js/store.js: failed compound 422 preserves local records (2.9714ms)
+✔ assets/js/store.js: failed compound 500 preserves local records (1.9101ms)
+✔ assets/js/store.js: compound success blocks an already queued old full-state save (2.7248ms)
+✔ assets/js/store.js: compound sync preserves unrelated drafts and detects concurrent changes (5.7104ms)
+✔ assets/js/store.js: modal revision is not silently upgraded before submitting a compound action (1.946ms)
+✔ public/assets/js/store.js: create project grid makes one request and adopts authoritative state (3.2835ms)
+✔ public/assets/js/store.js: edit project grid makes one request and adopts authoritative state (1.9649ms)
+✔ public/assets/js/store.js: delete project makes one request and adopts authoritative state (1.9583ms)
+✔ public/assets/js/store.js: create client and link project makes one request and adopts authoritative state (2.3654ms)
+✔ public/assets/js/store.js: edit client and link project makes one request and adopts authoritative state (3.7674ms)
+✔ public/assets/js/store.js: delete client makes one request and adopts authoritative state (1.7841ms)
+✔ public/assets/js/store.js: remove member makes one request and adopts authoritative state (1.6051ms)
+✔ public/assets/js/store.js: create department makes one request and adopts authoritative state (1.3654ms)
+✔ public/assets/js/store.js: rename department makes one request and adopts authoritative state (1.4451ms)
+✔ public/assets/js/store.js: delete department makes one request and adopts authoritative state (1.4062ms)
+✔ public/assets/js/store.js: voice brief makes one request and adopts authoritative state (1.6608ms)
+✔ public/assets/js/store.js: failed compound 403 preserves local records (1.4429ms)
+✔ public/assets/js/store.js: failed compound 404 preserves local records (1.4848ms)
+✔ public/assets/js/store.js: failed compound 409 preserves local records (2.3841ms)
+✔ public/assets/js/store.js: failed compound 422 preserves local records (3.1242ms)
+✔ public/assets/js/store.js: failed compound 500 preserves local records (2.8005ms)
+✔ public/assets/js/store.js: compound success blocks an already queued old full-state save (2.3145ms)
+✔ public/assets/js/store.js: compound sync preserves unrelated drafts and detects concurrent changes (4.7399ms)
+✔ public/assets/js/store.js: modal revision is not silently upgraded before submitting a compound action (2.2764ms)
+✔ assets/js/store.js: serializes snapshots with the latest successful revision (8.0806ms)
+✔ assets/js/store.js: conflict blocks queued stale writes until reload (1.9362ms)
+✔ assets/js/store.js: missing revision fails closed without a request (2.0552ms)
+✔ public/assets/js/store.js: serializes snapshots with the latest successful revision (5.9979ms)
+✔ public/assets/js/store.js: conflict blocks queued stale writes until reload (1.8879ms)
+✔ public/assets/js/store.js: missing revision fails closed without a request (1.5449ms)
+✔ assets/js/app.js: standalone task handlers contain no legacy task saves or duplicate effects (4.4212ms)
+✔ assets/js/app.js: standalone create form waits for API success without mutating tasks (4.0387ms)
+✔ assets/js/app.js: team task form uses task creation and guards duplicate submission (2.6254ms)
+✔ assets/js/app.js: task modal submits edits without optimistic local mutation (3.7487ms)
+✔ assets/js/app.js: recurring form uses task API and server scheduling (2.4809ms)
+✔ assets/js/app.js: complete and delete never save history through state (5.7346ms)
+✔ assets/js/app.js: brief without voice uses POST and keeps server side effects on the server (2.1442ms)
+✔ assets/js/app.js: failed modal request preserves task and displays server error (2.1749ms)
+✔ assets/js/app.js: client profile form submits project linking and login in one action (3.8315ms)
+✔ assets/js/app.js: department form uses transactional action without local renames (2.2946ms)
+✔ assets/js/app.js: compound delete handlers wait for server and preserve local tasks (2.5825ms)
+✔ assets/js/app.js: project grid uses one compound action without local mutation (2.5505ms)
+✔ assets/js/app.js: voice brief uses one compound action and retains draft on failure (1.8844ms)
+✔ assets/js/app.js: every migrated compound handler excludes full-state saves and local task mutation (0.6364ms)
+✔ public/assets/js/app.js: standalone task handlers contain no legacy task saves or duplicate effects (0.6446ms)
+✔ public/assets/js/app.js: standalone create form waits for API success without mutating tasks (2.1794ms)
+✔ public/assets/js/app.js: team task form uses task creation and guards duplicate submission (3.5736ms)
+✔ public/assets/js/app.js: task modal submits edits without optimistic local mutation (2.6282ms)
+✔ public/assets/js/app.js: recurring form uses task API and server scheduling (2.1245ms)
+✔ public/assets/js/app.js: complete and delete never save history through state (2.0245ms)
+✔ public/assets/js/app.js: brief without voice uses POST and keeps server side effects on the server (1.4734ms)
+✔ public/assets/js/app.js: failed modal request preserves task and displays server error (1.6658ms)
+✔ public/assets/js/app.js: client profile form submits project linking and login in one action (1.6587ms)
+✔ public/assets/js/app.js: department form uses transactional action without local renames (1.2463ms)
+✔ public/assets/js/app.js: compound delete handlers wait for server and preserve local tasks (1.7711ms)
+✔ public/assets/js/app.js: project grid uses one compound action without local mutation (2.8971ms)
+✔ public/assets/js/app.js: voice brief uses one compound action and retains draft on failure (2.0418ms)
+✔ public/assets/js/app.js: every migrated compound handler excludes full-state saves and local task mutation (0.6382ms)
+✔ assets/js/store.js: create sends only a task POST and applies the server ID and fields (7.6772ms)
+✔ assets/js/store.js: edit uses its endpoint and authoritative response without PUT (5.4476ms)
+✔ assets/js/store.js: status uses its endpoint and authoritative response without PUT (2.7164ms)
+✔ assets/js/store.js: progress uses its endpoint and authoritative response without PUT (2.3782ms)
+✔ assets/js/store.js: assignees uses its endpoint and authoritative response without PUT (2.4719ms)
+✔ assets/js/store.js: delete waits for success then removes the task and detaches messages (11.4168ms)
+✔ assets/js/store.js: 403 preserves local task and surfaces validation errors (3.1137ms)
+✔ assets/js/store.js: 404 preserves local task and surfaces validation errors (2.0478ms)
+✔ assets/js/store.js: 409 preserves local task and surfaces validation errors (2.5506ms)
+✔ assets/js/store.js: 422 preserves local task and surfaces validation errors (3.8893ms)
+✔ assets/js/store.js: failed create and delete cannot appear locally successful (2.2415ms)
+✔ assets/js/store.js: modal changes use one atomic PATCH and send only changed fields (2.8335ms)
+✔ assets/js/store.js: later non-task saves remain available with the refreshed revision (2.1965ms)
+✔ assets/js/store.js: old queued state snapshots cannot overwrite a successful targeted task (2.8616ms)
+✔ assets/js/store.js: unrelated local edits survive refresh; conflicting remote edits fail closed (3.4167ms)
+✔ assets/js/store.js: refresh failure keeps committed response and never retries creation (2.9021ms)
+✔ assets/js/store.js: team creation omits null recurrence without changing update clearing semantics (3.1446ms)
+✔ assets/js/store.js: status-only modal change does not send an empty description patch (2.9109ms)
+✔ assets/js/store.js: failed atomic completion changes neither status nor progress (4.3585ms)
+✔ assets/js/store.js: session refresh retries only a definite CSRF failure (3.2042ms)
+✔ public/assets/js/store.js: create sends only a task POST and applies the server ID and fields (4.7369ms)
+✔ public/assets/js/store.js: edit uses its endpoint and authoritative response without PUT (2.5917ms)
+✔ public/assets/js/store.js: status uses its endpoint and authoritative response without PUT (3.0053ms)
+✔ public/assets/js/store.js: progress uses its endpoint and authoritative response without PUT (2.646ms)
+✔ public/assets/js/store.js: assignees uses its endpoint and authoritative response without PUT (2.6777ms)
+✔ public/assets/js/store.js: delete waits for success then removes the task and detaches messages (9.2612ms)
+✔ public/assets/js/store.js: 403 preserves local task and surfaces validation errors (1.5783ms)
+✔ public/assets/js/store.js: 404 preserves local task and surfaces validation errors (1.3565ms)
+✔ public/assets/js/store.js: 409 preserves local task and surfaces validation errors (1.2757ms)
+✔ public/assets/js/store.js: 422 preserves local task and surfaces validation errors (1.2244ms)
+✔ public/assets/js/store.js: failed create and delete cannot appear locally successful (1.5471ms)
+✔ public/assets/js/store.js: modal changes use one atomic PATCH and send only changed fields (1.4355ms)
+✔ public/assets/js/store.js: later non-task saves remain available with the refreshed revision (1.6303ms)
+✔ public/assets/js/store.js: old queued state snapshots cannot overwrite a successful targeted task (1.2926ms)
+✔ public/assets/js/store.js: unrelated local edits survive refresh; conflicting remote edits fail closed (2.1296ms)
+✔ public/assets/js/store.js: refresh failure keeps committed response and never retries creation (1.0925ms)
+✔ public/assets/js/store.js: team creation omits null recurrence without changing update clearing semantics (1.2703ms)
+✔ public/assets/js/store.js: status-only modal change does not send an empty description patch (1.1691ms)
+✔ public/assets/js/store.js: failed atomic completion changes neither status nor progress (1.1598ms)
+✔ public/assets/js/store.js: session refresh retries only a definite CSRF failure (1.2984ms)
+ℹ tests 112
+ℹ suites 0
+ℹ pass 112
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 264.395
+
+php artisan route:list
+
+  POST      api/briefs ................................................................. DashboardTaskController@brief
+  GET|HEAD  api/chat-attachment ................................................... StateController@showChatAttachment
+  POST      api/chat-attachments ............................................... StateController@uploadChatAttachments
+  POST      api/chat-email ............................................................. StateController@sendChatEmail
+  POST      api/clients ............................................................... DashboardTaskController@client
+  PATCH     api/clients/{id} .......................................................... DashboardTaskController@client
+  DELETE    api/clients/{id} .................................................... DashboardTaskController@deleteClient
+  POST      api/departments ....................................................... DashboardTaskController@department
+  PATCH     api/departments/{id} .................................................. DashboardTaskController@department
+  DELETE    api/departments/{id} ............................................ DashboardTaskController@deleteDepartment
+  GET|HEAD  api/google-calendar/callback ........................................... GoogleCalendarController@callback
+  GET|HEAD  api/google-calendar/connect ............................................. GoogleCalendarController@connect
+  DELETE    api/google-calendar/disconnect ....................................... GoogleCalendarController@disconnect
+  GET|HEAD  api/google-calendar/events ............................................... GoogleCalendarController@events
+  GET|HEAD  api/google-calendar/status ............................................... GoogleCalendarController@status
+  POST      api/projects ............................................................. DashboardTaskController@project
+  DELETE    api/projects/{id} .................................................. DashboardTaskController@deleteProject
+  PATCH     api/projects/{id}/tasks .................................................. DashboardTaskController@project
+  POST      api/recurring-tasks/generate ...................................... StateController@generateRecurringTasks
+  GET|HEAD  api/session ...................................................................... StateController@session
+  POST      api/session ....................................................................... StateController@signIn
+  DELETE    api/session ...................................................................... StateController@signOut
+  GET|HEAD  api/state ........................................................................... StateController@show
+  PUT       api/state ......................................................................... StateController@update
+  POST      api/state/reset .................................................................... StateController@reset
+  POST      api/tasks ........................................................................... TaskController@store
+  GET|HEAD  api/tasks/{id} ....................................................................... TaskController@show
+  PATCH     api/tasks/{id} ..................................................................... TaskController@update
+  DELETE    api/tasks/{id} .................................................................... TaskController@destroy
+  PATCH     api/tasks/{id}/assignees ........................................................ TaskController@assignees
+  PATCH     api/tasks/{id}/progress .......................................................... TaskController@progress
+  PATCH     api/tasks/{id}/status .............................................................. TaskController@status
+  POST      api/team-member-image .............................................. StateController@uploadTeamMemberImage
+  GET|HEAD  api/team-member-image ................................................ StateController@showTeamMemberImage
+  DELETE    api/team-members/{id} ............................................... DashboardTaskController@deleteMember
+  GET|HEAD  storage/{path} storage.local › vendor/laravel/framework/src/Illuminate/Filesystem/FilesystemServiceProvid…
+  PUT       storage/{path} storage.local.upload › vendor/laravel/framework/src/Illuminate/Filesystem/FilesystemServic…
+  GET|HEAD  up ........... vendor/laravel/framework/src/Illuminate/Foundation/Configuration/ApplicationBuilder.php:219
+  GET|HEAD  {path?} .................................................................................................. 
+
+                                                                                                   Showing [39] routes
+
+
+git status
+On branch api
+Your branch is up to date with 'origin/api'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   app/Http/Controllers/StateController.php
+	modified:   app/Services/RecurringTaskGenerator.php
+	modified:   assets/js/app.js
+	modified:   assets/js/store.js
+	modified:   public/assets/js/app.js
+	modified:   public/assets/js/store.js
+	modified:   resources/views/app.blade.php
+	modified:   routes/web.php
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	app/Http/Controllers/DashboardTaskController.php
+	app/Http/Controllers/TaskController.php
+	app/Mail/
+	app/Services/DashboardTaskOperations.php
+	app/Services/StateConcurrency.php
+	app/Services/TaskEffects.php
+	app/Services/TaskService.php
+	docs/
+	phpunit.xml
+	resources/views/emails/
+	tests/
+
+no changes added to commit (use "git add" and/or "git commit -a")
+
+git diff --stat
+warning: in the working copy of 'app/Http/Controllers/StateController.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/Services/RecurringTaskGenerator.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'assets/js/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'assets/js/store.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'public/assets/js/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'public/assets/js/store.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'resources/views/app.blade.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'routes/web.php', LF will be replaced by CRLF the next time Git touches it
+ app/Http/Controllers/StateController.php | 135 ++++++-------------
+ app/Services/RecurringTaskGenerator.php  |   4 +-
+ assets/js/app.js                         | 170 +++++++++++++-----------
+ assets/js/store.js                       | 184 +++++++++++++++++++++++++-
+ public/assets/js/app.js                  | 138 +++++++++----------
+ public/assets/js/store.js                | 219 +++++++++++++++++++++++++------
+ resources/views/app.blade.php            |   4 +-
+ routes/web.php                           |  20 +++
+ 8 files changed, 578 insertions(+), 296 deletions(-)
+

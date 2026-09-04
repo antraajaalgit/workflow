@@ -1,10 +1,30 @@
 <?php
 
 use App\Http\Controllers\StateController;
+use App\Http\Controllers\TaskController;
+use App\Http\Controllers\DashboardTaskController;
 use App\Http\Controllers\GoogleCalendarController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('api')->group(function () {
+    Route::post('/projects', [DashboardTaskController::class, 'project']);
+    Route::patch('/projects/{id}/tasks', [DashboardTaskController::class, 'project']);
+    Route::delete('/projects/{id}', [DashboardTaskController::class, 'deleteProject']);
+    Route::post('/clients', [DashboardTaskController::class, 'client']);
+    Route::patch('/clients/{id}', [DashboardTaskController::class, 'client']);
+    Route::delete('/clients/{id}', [DashboardTaskController::class, 'deleteClient']);
+    Route::delete('/team-members/{id}', [DashboardTaskController::class, 'deleteMember']);
+    Route::post('/departments', [DashboardTaskController::class, 'department']);
+    Route::patch('/departments/{id}', [DashboardTaskController::class, 'department']);
+    Route::delete('/departments/{id}', [DashboardTaskController::class, 'deleteDepartment']);
+    Route::post('/briefs', [DashboardTaskController::class, 'brief']);
+    Route::get('/tasks/{id}', [TaskController::class, 'show']);
+    Route::post('/tasks', [TaskController::class, 'store']);
+    Route::patch('/tasks/{id}', [TaskController::class, 'update']);
+    Route::patch('/tasks/{id}/status', [TaskController::class, 'status']);
+    Route::patch('/tasks/{id}/progress', [TaskController::class, 'progress']);
+    Route::patch('/tasks/{id}/assignees', [TaskController::class, 'assignees']);
+    Route::delete('/tasks/{id}', [TaskController::class, 'destroy']);
     Route::get('/session', [StateController::class, 'session']);
     Route::post('/session', [StateController::class, 'signIn'])->middleware('throttle:10,1');
     Route::delete('/session', [StateController::class, 'signOut']);

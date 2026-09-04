@@ -83,19 +83,190 @@ function seed() {
 
 const Store = {
   data: null,
+
+  taskPayload(values) {
+    const fields = {clientId:'client_id',projectId:'project_id',title:'title',desc:'description',dept:'department',ownerId:'owner_id',ownerIds:'owner_ids',status:'status',priority:'priority',progress:'progress',dueDate:'due_date_ms',recurring:'recurring',nextRecurrenceAt:'next_recurrence_at_ms',attachments:'attachments'};
+    return Object.fromEntries(Object.entries(fields).filter(([key])=>Object.hasOwn(values,key)).map(([key,column])=>[column,values[key]]));
+  },
+  taskFromApi(task) {
+    return {id:task.id,clientId:task.client_id,projectId:task.project_id,title:task.title,desc:task.description,dept:task.department,
+      ownerId:task.owner_id,ownerIds:task.owner_ids,status:task.status,priority:task.priority,progress:task.progress,
+      createdAt:task.created_at_ms,stageAt:task.stage_at_ms,dueDate:task.due_date_ms,recurring:task.recurring,
+      nextRecurrenceAt:task.next_recurrence_at_ms,attachments:task.attachments||[]};
+  },
+  async taskJson(url, method, payload) {
+    for (let attempt=0; attempt<2; attempt++) {
+      const token=document.querySelector('meta[name="csrf-token"]')?.content;
+      const headers=this.headers ? this.headers({'Content-Type':'application/json'}) : {Accept:'application/json','Content-Type':'application/json',...(token?{'X-CSRF-TOKEN':token}:{})};
+      const response=await fetch(url,{method,credentials:'same-origin',headers,...(payload===undefined?{}:{body:JSON.stringify(payload)})});
+      if(response.status===419 && !attempt) {
+        const session=this.currentSession ? await this.currentSession() : await (await fetch('/api/session',{credentials:'same-origin',headers:{Accept:'application/json'}})).json();
+        if(!session.userId) throw new Error('Your session has expired. Please sign in again.');
+        const meta=document.querySelector('meta[name="csrf-token"]');if(meta&&session.csrfToken)meta.content=session.csrfToken;
+        continue;
+      }
+      const result=await response.json().catch(()=>({message:'Unable to save task'}));
+      if(!response.ok) {
+        const details=Object.values(result.errors||{}).flat().join(' ');
+        const error=new Error(details||result.message||'Unable to save task');error.status=response.status;throw error;
+      }
+      return result;
+    }
+  },
+  taskRequest(method, id, suffix, payload) {
+    const source=this.data;
+    const body=payload===undefined?undefined:JSON.parse(JSON.stringify(payload));
+    const pending=this._saveQueue||Promise.resolve();
+    const operation=pending.catch(()=>{}).then(async()=>{
+      if(this.data!==source) throw new Error('Application data changed. Reload before saving.');
+      const baseline=JSON.parse(JSON.stringify(this._baseline||source));
+      if(JSON.stringify(source.tasks)!==JSON.stringify(baseline.tasks)) throw new Error('Save or reload pending task changes before using this action.');
+      let result;
+      try { result=await this.taskJson('/api/tasks'+(id==null?'':'/'+encodeURIComponent(id))+suffix,method,body); }
+      catch(error) {
+        if(!error.status || [404,409].includes(error.status)) source._revision=null;
+        throw error;
+      }
+      if(method==='DELETE' ? result.deleted!==true : typeof result.id!=='string') {
+        source._revision=null;throw new Error('Unable to confirm task save. Reload before retrying.');
+      }
+      this._taskGeneration=(this._taskGeneration||0)+1;
+      const apply = state => {
+        if(method==='DELETE') {
+          state.tasks=state.tasks.filter(task=>task.id!==id);
+          (state.messages||[]).forEach(message=>{if(message.taskId===id)message.taskId=null;});
+        } else {
+          const task=this.taskFromApi(result),index=state.tasks.findIndex(item=>item.id===task.id);
+          if(index<0)state.tasks.push(task);else state.tasks[index]=task;
+        }
+      };
+      apply(source);apply(baseline);
+      // Refresh server effects and revision without performing another write.
+      // Preserve unrelated local edits only when the remote field has not also changed.
+      try {
+        const remote=await this.taskJson('/api/state','GET');
+        if(!Array.isArray(remote.tasks)||typeof remote._revision!=='string')throw new Error('Invalid state response');
+        let conflict=false;
+        for(const key of Object.keys(remote).filter(key=>key!=='_revision')) {
+          if(JSON.stringify(source[key])===JSON.stringify(baseline[key])) source[key]=remote[key];
+          else if(JSON.stringify(remote[key])!==JSON.stringify(baseline[key])) conflict=true;
+        }
+        source._revision=conflict?null:remote._revision;
+        this._baseline=JSON.parse(JSON.stringify(remote));
+        if(conflict) result.syncWarning='Task saved. Other data changed; reload before saving other changes.';
+      } catch(error) {
+        source._revision=null;
+        // Keep the authoritative successful response; never retry a committed POST.
+        this._baseline=baseline;
+        result.syncWarning='Task saved, but dashboard refresh failed. Reload before saving other changes.';
+      }
+      return result;
+    });
+    this._saveQueue=operation;
+    return operation;
+  },
+  createTask(values) {
+    const payload=this.taskPayload(values);
+    // Non-recurring team tasks must omit admin-only recurrence fields entirely.
+    if(payload.recurring==null)delete payload.recurring;
+    if(payload.next_recurrence_at_ms==null)delete payload.next_recurrence_at_ms;
+    return this.taskRequest('POST',null,'',payload);
+  },
+  updateTask(id,values) { return this.taskRequest('PATCH',id,'',this.taskPayload(values)); },
+  setTaskStatus(id,status) { return this.taskRequest('PATCH',id,'/status',{status}); },
+  setTaskProgress(id,progress) { return this.taskRequest('PATCH',id,'/progress',{progress}); },
+  setTaskAssignees(id,ownerIds) { return this.taskRequest('PATCH',id,'/assignees',{owner_ids:ownerIds}); },
+  deleteTask(id) { return this.taskRequest('DELETE',id,''); },
+  async saveTaskChanges(id,values) {
+    const task=this.data.tasks.find(task=>task.id===id);
+    if(!task) throw new Error('Task not found.');
+    const changes=Object.fromEntries(Object.entries(values).filter(([key,value])=>JSON.stringify(value)!==JSON.stringify(task[key]) && !(key==='desc'&&!value&&!task[key])));
+    const keys=Object.keys(changes);
+    if(!keys.length)return {assignmentMailFailures:[]};
+    if(keys.length===1&&keys[0]==='status')return this.setTaskStatus(id,changes.status);
+    if(keys.length===1&&keys[0]==='progress')return this.setTaskProgress(id,changes.progress);
+    if(keys.every(key=>['ownerId','ownerIds'].includes(key)))return this.setTaskAssignees(id,changes.ownerIds??(changes.ownerId?[changes.ownerId]:[]));
+    return this.updateTask(id,changes);
+  },
+  compoundRequest(url,method,values={}) {
+    const source=this.data,body=JSON.parse(JSON.stringify(values));
+    const operation=(this._saveQueue||Promise.resolve()).catch(()=>{}).then(async()=>{
+      if(this.data!==source)throw new Error('Application data changed. Reload before saving.');
+      const baseline=JSON.parse(JSON.stringify(this._baseline||source));
+      if(JSON.stringify(source.tasks)!==JSON.stringify(baseline.tasks))throw new Error('Reload pending task changes before using this action.');
+      let result;
+      try{result=await this.taskJson(url,method,{...body,_revision:body._revision??source._revision});}
+      catch(error){if(!error.status||[404,409].includes(error.status))source._revision=null;throw error;}
+      const remote=result.state;
+      if(!Array.isArray(remote?.tasks)||typeof remote._revision!=='string'){
+        source._revision=null;throw new Error('Unable to confirm save. Reload before retrying.');
+      }
+      this._taskGeneration=(this._taskGeneration||0)+1;
+      let conflict=false;
+      for(const key of Object.keys(remote).filter(key=>key!=='_revision')){
+        if(key==='tasks'||JSON.stringify(source[key])===JSON.stringify(baseline[key]))source[key]=remote[key];
+        else if(JSON.stringify(remote[key])!==JSON.stringify(baseline[key]))conflict=true;
+      }
+      source._revision=conflict?null:remote._revision;
+      this._baseline=JSON.parse(JSON.stringify(remote));
+      if(conflict)result.syncWarning='Saved. Other data changed; reload before saving other changes.';
+      return result;
+    });
+    this._saveQueue=operation;return operation;
+  },
+  saveProject(id,values){return this.compoundRequest(id?'/api/projects/'+encodeURIComponent(id)+'/tasks':'/api/projects',id?'PATCH':'POST',values);},
+  deleteProject(id){return this.compoundRequest('/api/projects/'+encodeURIComponent(id),'DELETE');},
+  saveClient(id,values){return this.compoundRequest('/api/clients'+(id?'/'+encodeURIComponent(id):''),id?'PATCH':'POST',values);},
+  deleteClient(id){return this.compoundRequest('/api/clients/'+encodeURIComponent(id),'DELETE');},
+  deleteMember(id){return this.compoundRequest('/api/team-members/'+encodeURIComponent(id),'DELETE');},
+  saveDepartment(id,values){return this.compoundRequest('/api/departments'+(id?'/'+encodeURIComponent(id):''),id?'PATCH':'POST',values);},
+  deleteDepartment(id){return this.compoundRequest('/api/departments/'+encodeURIComponent(id),'DELETE');},
+  createBrief(values,voice){return this.compoundRequest('/api/briefs','POST',{task:this.taskPayload(values),voice});},
+
   async load() {
+    await (this._saveQueue||Promise.resolve()).catch(()=>{});
     const response = await fetch('/api/state', { headers: { Accept: 'application/json' } });
     if (!response.ok) throw new Error('Unable to load application data');
     this.data = await response.json();
+    this._baseline = JSON.parse(JSON.stringify(this.data));
     return this.data;
   },
-  async save() {
-    const response = await fetch('/api/state', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(this.data),
+  // Keep legacy whole-state saving, but serialize calls and carry a server revision.
+  save() {
+    const source = this.data;
+    const snapshot = JSON.parse(JSON.stringify(source));
+    const generation = this._taskGeneration||0;
+    const pending = this._saveQueue || Promise.resolve();
+    const operation = pending.catch(() => {}).then(async () => {
+      if (this.data !== source || !source?._revision || generation !== (this._taskGeneration||0)) {
+        throw new Error('Application data changed. Reload before saving.');
+      }
+      snapshot._revision = source._revision;
+      try {
+        let response;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const headers = this.headers ? this.headers({'Content-Type':'application/json'}) : {
+            Accept:'application/json', 'Content-Type':'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || ''
+          };
+          response = await fetch('/api/state', {method:'PUT', headers, body:JSON.stringify({...snapshot,tasks:undefined})});
+          if (response.status !== 419 || attempt || !this.currentSession) break;
+          const session = await this.currentSession();
+          if (!session.userId) throw new Error('Your session has expired. Please sign in again.');
+        }
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message || 'Unable to save application data');
+        source._revision = result._revision;
+        this._baseline = {...snapshot,_revision:result._revision};
+        return result;
+      } catch (error) {
+        // A failed/uncertain write must not be retried using an older snapshot.
+        source._revision = null;
+        throw error;
+      }
     });
-    if (!response.ok) throw new Error('Unable to save application data');
+    this._saveQueue = operation;
+    return operation;
   },
   async reset() {
     const response = await fetch('/api/state/reset', {
@@ -104,6 +275,7 @@ const Store = {
     });
     if (!response.ok) throw new Error('Unable to reset application data');
     this.data = await response.json();
+    this._baseline = JSON.parse(JSON.stringify(this.data));
   },
   async sendChatEmail(payload) {
     const response = await fetch('/api/chat-email', {method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(payload)});

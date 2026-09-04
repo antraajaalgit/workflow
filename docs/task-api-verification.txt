@@ -1,0 +1,128 @@
+Karya task API verification — branch api
+No commits, pushes, merges, deployment or normal database changes.
+MySQL/MariaDB integration tests were NOT executed: dedicated test credentials are not configured.
+
+php artisan test (process-only pdo_sqlite enabled; normal php.ini and .env unchanged)
+
+   WARN  Tests\Feature\TaskApiTest
+  ✓ create get update and preserve unrelated fields                                                              0.25s  
+  ✓ missing tasks return 404                                                                                     0.04s  
+  ✓ status and progress values and endpoint isolation                                                            0.06s  
+  ✓ single multiple legacy and invalid assignees                                                                 0.05s  
+  ✓ authorization for assigned team clients and guests                                                           0.05s  
+  ✓ relationships recurrence and attachments                                                                     0.05s  
+  ✓ delete retains conversation and other tasks                                                                  0.04s  
+  ✓ existing state routes and state task serialization                                                           0.04s  
+  ✓ assignment mail reassignment and history are idempotent                                                      0.05s  
+  ✓ completion and client brief notifications are persisted not sent                                             0.04s  
+  ✓ fresh state save and stale api update create delete protection                                               0.09s  
+  ✓ state reassignment uses shared mail without duplicate sends                                                  0.07s  
+  ✓ recurring generation keeps schema values and invalidates state                                               0.04s  
+  ✓ unsafe attachment data and task ids are rejected                                                             0.04s  
+  ✓ mail failure does not rollback task or history                                                               0.05s  
+  ✓ team creation and unassigned admin validation                                                                0.05s  
+  ✓ all task routes require a valid session                                                                      0.04s  
+  - mysql mutex blocks other connections and releases after rollback → Requires the guarded dedicated MySQL tes… 0.04s  
+
+  Tests:    1 skipped, 17 passed (177 assertions)
+  Duration: 1.24s
+
+
+node --test tests/js/store.test.cjs
+✔ assets/js/store.js: serializes snapshots with the latest successful revision (8.1316ms)
+✔ assets/js/store.js: conflict blocks queued stale writes until reload (2.2359ms)
+✔ assets/js/store.js: missing revision fails closed without a request (2.3364ms)
+✔ public/assets/js/store.js: serializes snapshots with the latest successful revision (7.8152ms)
+✔ public/assets/js/store.js: conflict blocks queued stale writes until reload (1.5267ms)
+✔ public/assets/js/store.js: missing revision fails closed without a request (1.3465ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 142.6359
+
+php artisan route:list
+
+  GET|HEAD  api/chat-attachment ................................................... StateController@showChatAttachment
+  POST      api/chat-attachments ............................................... StateController@uploadChatAttachments
+  POST      api/chat-email ............................................................. StateController@sendChatEmail
+  GET|HEAD  api/google-calendar/callback ........................................... GoogleCalendarController@callback
+  GET|HEAD  api/google-calendar/connect ............................................. GoogleCalendarController@connect
+  DELETE    api/google-calendar/disconnect ....................................... GoogleCalendarController@disconnect
+  GET|HEAD  api/google-calendar/events ............................................... GoogleCalendarController@events
+  GET|HEAD  api/google-calendar/status ............................................... GoogleCalendarController@status
+  POST      api/recurring-tasks/generate ...................................... StateController@generateRecurringTasks
+  GET|HEAD  api/session ...................................................................... StateController@session
+  POST      api/session ....................................................................... StateController@signIn
+  DELETE    api/session ...................................................................... StateController@signOut
+  GET|HEAD  api/state ........................................................................... StateController@show
+  PUT       api/state ......................................................................... StateController@update
+  POST      api/state/reset .................................................................... StateController@reset
+  POST      api/tasks ........................................................................... TaskController@store
+  GET|HEAD  api/tasks/{id} ....................................................................... TaskController@show
+  PATCH     api/tasks/{id} ..................................................................... TaskController@update
+  DELETE    api/tasks/{id} .................................................................... TaskController@destroy
+  PATCH     api/tasks/{id}/assignees ........................................................ TaskController@assignees
+  PATCH     api/tasks/{id}/progress .......................................................... TaskController@progress
+  PATCH     api/tasks/{id}/status .............................................................. TaskController@status
+  POST      api/team-member-image .............................................. StateController@uploadTeamMemberImage
+  GET|HEAD  api/team-member-image ................................................ StateController@showTeamMemberImage
+  GET|HEAD  storage/{path} storage.local › vendor/laravel/framework/src/Illuminate/Filesystem/FilesystemServiceProvid…
+  PUT       storage/{path} storage.local.upload › vendor/laravel/framework/src/Illuminate/Filesystem/FilesystemServic…
+  GET|HEAD  up ........... vendor/laravel/framework/src/Illuminate/Foundation/Configuration/ApplicationBuilder.php:219
+  GET|HEAD  {path?} .................................................................................................. 
+
+                                                                                                   Showing [28] routes
+
+
+git diff --check; git status; git diff --stat (untracked files are not included in diff --stat)
+warning: in the working copy of 'app/Http/Controllers/StateController.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/Services/RecurringTaskGenerator.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'assets/js/store.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'public/assets/js/store.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'resources/views/app.blade.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'routes/web.php', LF will be replaced by CRLF the next time Git touches it
+On branch api
+Your branch is up to date with 'origin/api'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   app/Http/Controllers/StateController.php
+	modified:   app/Services/RecurringTaskGenerator.php
+	modified:   assets/js/store.js
+	modified:   public/assets/js/store.js
+	modified:   resources/views/app.blade.php
+	modified:   routes/web.php
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	app/Http/Controllers/TaskController.php
+	app/Mail/
+	app/Services/StateConcurrency.php
+	app/Services/TaskEffects.php
+	app/Services/TaskService.php
+	docs/
+	phpunit.xml
+	resources/views/emails/
+	tests/
+
+no changes added to commit (use "git add" and/or "git commit -a")
+warning: in the working copy of 'app/Http/Controllers/StateController.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/Services/RecurringTaskGenerator.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'assets/js/store.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'public/assets/js/store.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'resources/views/app.blade.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'routes/web.php', LF will be replaced by CRLF the next time Git touches it
+ app/Http/Controllers/StateController.php | 102 ++++++++++---------------------
+ app/Services/RecurringTaskGenerator.php  |   4 +-
+ assets/js/store.js                       |  39 ++++++++++--
+ public/assets/js/store.js                |  74 +++++++++++-----------
+ resources/views/app.blade.php            |   2 +-
+ routes/web.php                           |   8 +++
+ 6 files changed, 112 insertions(+), 117 deletions(-)
+
+

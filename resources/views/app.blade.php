@@ -37,7 +37,7 @@
   <div id="notif-drawer" class="drawer hidden"><div class="drawer-head"><strong>Outbound messages</strong><span class="muted small">WhatsApp + Email (simulated)</span><button id="notif-close" class="btn-ghost small">Close</button></div><div id="notif-list" class="notif-list"></div></div>
   <div id="scrim" class="scrim hidden"></div>
   <div id="modal-host"></div>
-  <script src="{{ asset('assets/js/store.js') }}?v=14"></script>
-  <script src="{{ asset('assets/js/app.js') }}?v=51"></script>
+  <script src="{{ asset('assets/js/store.js') }}?v=17"></script>
+  <script src="{{ asset('assets/js/app.js') }}?v=53"></script>
 </body>
 </html>

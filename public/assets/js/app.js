@@ -423,6 +423,7 @@ function bindProjectTaskFiles(list){
 }
 
 function openProjectForm(projectId=null){
+  const formRevision=S()._revision;
   const project=projectById(projectId); const editing=!!project;
   const projectTasks=editing?S().tasks.filter(t=>t.projectId===project.id):[];
   const clientOpts=`<option value="" ${project?.clientId?'':'selected'}>No client</option>`+S().clients.map(c=>`<option value="${c.id}" ${c.id===project?.clientId?'selected':''}>${esc(c.company)}</option>`).join('');
@@ -448,25 +449,21 @@ function openProjectForm(projectId=null){
     if(rows.some(row=>row._reading>0)){toast('Please wait for attachments to finish loading');return;}
     const invalid=rows.some(row=>!$('[data-pt-title]',row).value.trim()||!selectedValues($('[data-pt-owner]',row)).length||!$('[data-pt-dept]',row).value);
     if(invalid){toast('Every task needs a title, assignee and department');return;}
-    const id=project?.id||'p_'+Math.random().toString(36).slice(2,9), clientId=$('#project-client',modal).value||null, now=Date.now();
-    if(project) Object.assign(project,{clientId,name,desc:$('#project-desc',modal).value.trim(),dueDate:null});
-    else S().projects.push({id,clientId,name,desc:$('#project-desc',modal).value.trim(),status:'active'});
+    const clientId=$('#project-client',modal).value||null;
     const retainedIds=rows.map(row=>row.dataset.taskId).filter(Boolean);
     const removedIds=projectTasks.filter(t=>!retainedIds.includes(t.id)).map(t=>t.id);
-    S().tasks=S().tasks.filter(t=>!removedIds.includes(t.id));
-    S().messages.forEach(m=>{if(removedIds.includes(m.taskId))m.taskId=null;});
-    rows.forEach(row=>{const ownerIds=selectedValues($('[data-pt-owner]',row));const existing=row.dataset.taskId?S().tasks.find(t=>t.id===row.dataset.taskId):null;const dueInput=$('[data-pt-due]',row).value;const values={projectId:id,clientId,title:$('[data-pt-title]',row).value.trim(),desc:$('[data-pt-desc]',row).value.trim(),dept:$('[data-pt-dept]',row).value,ownerIds,ownerId:ownerIds[0],priority:$('[data-pt-priority]',row).value,progress:$('[data-pt-progress]',row).value,dueDate:dueInput?new Date(dueInput).getTime():null,attachments:row._attachments||[]};if(existing)Object.assign(existing,values);else S().tasks.push({id:'t_'+Math.random().toString(36).slice(2,9),...values,status:'todo',createdAt:now,stageAt:now,recurring:null});});
-    try{const result=await Store.save();logActivity(`Project "${name}" ${editing?'updated':'created'} with ${rows.length} assigned task${rows.length===1?'':'s'}`,'brief');close();go('projects');toast(result.assignmentMailFailures?.length?'✅ Saved, but an assignment email could not be sent':editing?'✅ Project updated':'✅ Project and tasks created — assignment email sent');}catch(error){await Store.load();render();toast(error.message);}
+    const tasks=rows.map(row=>{const ownerIds=selectedValues($('[data-pt-owner]',row));const dueInput=$('[data-pt-due]',row).value;return {...(row.dataset.taskId?{id:row.dataset.taskId}:{}),...Store.taskPayload({title:$('[data-pt-title]',row).value.trim(),desc:$('[data-pt-desc]',row).value.trim(),dept:$('[data-pt-dept]',row).value,ownerIds,priority:$('[data-pt-priority]',row).value,progress:$('[data-pt-progress]',row).value,dueDate:dueInput?new Date(dueInput).getTime():null,attachments:row._attachments||[]})};});
+    try{const result=await Store.saveProject(project?.id,{name,client_id:clientId,description:$('#project-desc',modal).value.trim(),tasks,delete_ids:removedIds,_revision:formRevision});taskWriteWarnings(result);close();go('projects');toast(result.assignmentMailFailures?.length?'✅ Saved, but an assignment email could not be sent':editing?'✅ Project updated':'✅ Project and tasks created — assignment email sent');}catch(error){toast(error.message);}
+
   };
+  guardTaskButton($('#save-project',modal));
 }
 
 async function deleteProject(projectId){
   const project=projectById(projectId); if(!project)return;
   const taskIds=S().tasks.filter(t=>t.projectId===projectId).map(t=>t.id);
   if(!confirm(`Delete "${project.name}" and its ${taskIds.length} task${taskIds.length===1?'':'s'}? This cannot be undone.`))return;
-  S().projects=S().projects.filter(p=>p.id!==projectId); S().tasks=S().tasks.filter(t=>t.projectId!==projectId);
-  S().messages.forEach(m=>{if(taskIds.includes(m.taskId))m.taskId=null;});
-  try{await Store.save();render();buildNav();toast('🗑️ Project deleted');}catch(error){await Store.load();render();toast(error.message);}
+  try{const result=await Store.deleteProject(projectId);taskWriteWarnings(result);render();buildNav();toast('🗑️ Project deleted');}catch(error){toast(error.message);}
 }
 
 /* ---------- ANDON BOARD ---------- */
@@ -592,6 +589,7 @@ function viewClientFolder(){
 }
 
 function openClientForm(clientId=null){
+  const formRevision=S()._revision;
   if(session.role!=='admin')return;
   const client=clientById(clientId),editing=!!client;
   const assignedProject=(S().projects||[]).find(p=>p.clientId===clientId);
@@ -636,21 +634,17 @@ if (duplicate) {
 
 
     saveButton.disabled=true;saveButton.innerHTML=`<span class="btn-spinner"></span>${editing?'Saving changes…':'Creating client…'}`;
-    let savedClientId=client?.id;
-    if(client){Object.assign(client,{name,company,email,phone,color});const login=S().users.find(u=>u.role==='client'&&(u.clientId===client.id||u.id===client.id));if(login)Object.assign(login,{name,company,email,phone,color,clientId:client.id});}
-    else{savedClientId='c_'+Math.random().toString(36).slice(2,9);S().clients.push({id:savedClientId,name,company,email,phone,color});S().users.push({id:savedClientId,name,role:'client',roleId:0,dept:null,clientId:savedClientId,company,email,phone,color,password});}
-    if(assignedProject&&assignedProject.id!==projectId){assignedProject.clientId=null;S().tasks.filter(t=>t.projectId===assignedProject.id).forEach(t=>t.clientId=null);}
-    const selectedProject=projectById(projectId);if(selectedProject){selectedProject.clientId=savedClientId;S().tasks.filter(t=>t.projectId===selectedProject.id).forEach(t=>t.clientId=savedClientId);}
-    try{const result=await Store.save();S().users.forEach(u=>delete u.password);logActivity(`Client ${company} ${editing?'updated':'added'}`,'brief');close();render();toast(editing?'✅ Client updated':result.mailFailures?.length?'✅ Client created, but the login email could not be sent':'✅ Client created — login email sent');}catch(error){await Store.load();render();saveButton.disabled=false;saveButton.textContent=editing?'Save changes':'Create client';toast(error.message);}
+    try{const result=await Store.saveClient(client?.id,{name,company,email,phone,color,project_id:projectId,...(editing?{}:{password}),_revision:formRevision});taskWriteWarnings(result);close();render();toast(editing?'✅ Client updated':result.mailFailures?.length?'✅ Client created, but the login email could not be sent':'✅ Client created — login email sent');}catch(error){saveButton.disabled=false;saveButton.textContent=editing?'Save changes':'Create client';toast(error.message);}
+
   };
+  guardTaskButton($('#save-client',modal));
 }
 
 async function deleteClient(clientId){
   if(session.role!=='admin')return;const client=clientById(clientId);if(!client)return;
   const taskIds=S().tasks.filter(t=>t.clientId===clientId).map(t=>t.id),projectCount=(S().projects||[]).filter(p=>p.clientId===clientId).length;
   if(!confirm(`Delete ${client.company}? This will also delete ${projectCount} project${projectCount===1?'':'s'}, ${taskIds.length} task${taskIds.length===1?'':'s'}, and all client conversations.`))return;
-  S().messages=S().messages.filter(m=>m.clientId!==clientId);S().tasks=S().tasks.filter(t=>t.clientId!==clientId);S().projects=(S().projects||[]).filter(p=>p.clientId!==clientId);S().users=S().users.filter(u=>!(u.role==='client'&&(u.clientId===clientId||u.id===clientId)));S().clients=S().clients.filter(c=>c.id!==clientId);
-  try{await Store.save();go('clients');toast('🗑️ Client and folder deleted');}catch(error){await Store.load();go('clients');toast(error.message);}
+  try{const result=await Store.deleteClient(clientId);taskWriteWarnings(result);go('clients');toast('🗑️ Client and folder deleted');}catch(error){toast(error.message);}
 }
 
 /* ---------- INBOX (all conversations) ---------- */
@@ -709,6 +703,7 @@ function viewDepartments(){
 }
 
 function openDepartmentForm(departmentId=null){
+  const formRevision=S()._revision;
   const department=departmentId?departments().find(d=>d.id===departmentId):null;
   const modal=document.createElement('div');modal.className='modal-scrim';
   modal.innerHTML=`<div class="modal"><div class="modal-head"><h2>${department?'Edit':'Add'} department</h2><button class="btn-ghost" data-close>✕</button></div><div class="modal-body"><div class="field"><label>Name <span class="req">*</span></label><input id="dept-name" maxlength="80" value="${esc(department?.name||'')}" placeholder="e.g. Digital Marketing"></div><div class="field"><label>Colour</label><input id="dept-color" type="color" value="${department?.color||'#3a6ea5'}"></div></div><div class="modal-foot"><button class="btn-ghost" data-close>Cancel</button><button class="btn" id="dept-save">${department?'Save changes':'Create department'}</button></div></div>`;
@@ -717,10 +712,9 @@ function openDepartmentForm(departmentId=null){
     const name=$('#dept-name',modal).value.trim(),color=$('#dept-color',modal).value;
     if(!name){toast('Enter a department name');return;}
     if(departments().some(d=>d.id!==departmentId&&d.name.toLowerCase()===name.toLowerCase())){toast('That department already exists');return;}
-    const oldName=department?.name,added=department?null:{id:'dept_'+Math.random().toString(36).slice(2,11),name,color};
-    if(department){department.name=name;department.color=color;S().users.forEach(u=>{if(u.dept===oldName)u.dept=name;});S().tasks.forEach(t=>{if(t.dept===oldName)t.dept=name;});}else departments().push(added);
-    try{await Store.save();modal.remove();render();toast(department?'✅ Department updated':'✅ Department created');}catch(error){await Store.load();render();toast(error.message);}
+    try{const result=await Store.saveDepartment(department?.id,{name,color,_revision:formRevision});taskWriteWarnings(result);modal.remove();render();toast(department?'✅ Department updated':'✅ Department created');}catch(error){toast(error.message);}
   };
+  guardTaskButton($('#dept-save',modal));
 }
 
 async function deleteDepartment(departmentId){
@@ -730,9 +724,7 @@ async function deleteDepartment(departmentId){
   const fallback=departments().find(d=>d.id!==departmentId);
   const moveNote=tasks?` ${tasks} existing task(s) will move to ${fallback?.name||'General'}.`:'';
   if(!confirm(`Delete the ${department.name} department?${moveNote}`))return;
-  S().tasks.forEach(t=>{if(t.dept===department.name)t.dept=fallback?.name||'General';});
-  S().departments=departments().filter(d=>d.id!==departmentId);
-  try{await Store.save();render();toast('🗑️ Department deleted');}catch(error){await Store.load();render();toast(error.message);}
+  try{const result=await Store.deleteDepartment(departmentId);taskWriteWarnings(result);render();toast('🗑️ Department deleted');}catch(error){toast(error.message);}
 }
 
 function viewTeam(){
@@ -800,9 +792,7 @@ function openTeamMember(memberId=null){
 async function deleteTeamMember(memberId){
   const member=userById(memberId); if(!member) return;
   if(!confirm(`Delete ${member.name}? Their assigned tasks will become unassigned.`)) return;
-  S().tasks.forEach(t=>{t.ownerIds=taskOwnerIds(t).filter(id=>id!==memberId);t.ownerId=t.ownerIds[0]||null;});
-  S().users=S().users.filter(u=>u.id!==memberId);
-  await Store.save(); render(); toast('🗑️ Team member deleted');
+  try{const result=await Store.deleteMember(memberId);taskWriteWarnings(result);render();toast('🗑️ Team member deleted');}catch(error){toast(error.message);}
 }
 
 /* ---------- SETTINGS ---------- */
@@ -978,37 +968,42 @@ async function sendMessage(clientId, taskId, text, voice, attachments=[]){
    SUBMIT NEW REQUEST (client)
 ============================================================ */
 let pendingVoice=null, pendingAttachments=[];
-function submitRequest(){
+// Task writes own their server side effects; these helpers never save global state.
+function taskWriteWarnings(result){if(result?.syncWarning)toast(result.syncWarning);updateBell();}
+function taskNotificationToasts(phone,email){
+  if(phone)toast(`📱 WhatsApp sent → ${phone}`,'wa');
+  if(email)toast(`✉️ Email sent → ${email}`,'email');
+  updateBell();
+}
+function guardTaskButton(button){
+  const action=button.onclick;
+  button.onclick=async function(...args){if(button._taskBusy)return;button._taskBusy=true;try{return await action.apply(this,args);}finally{button._taskBusy=false;}};
+}
+
+async function submitRequest(){
   const title=$('#req-title').value.trim();
   const desc=$('#req-desc').value.trim();
   let ok=true;
   $('#f-title').classList.toggle('err', !title); if(!title) ok=false;
   $('#f-desc').classList.toggle('err', !desc); if(!desc) ok=false;
   if (!ok){ toast('Please fill the required fields'); return; }
-  const dept = delegate(title+' '+desc);
-  const due = $('#req-due').value ? new Date($('#req-due').value).getTime() : Date.now()+86400000;
-  const task = { id:Math.random().toString(36).slice(2,9), projectId:null, clientId:session.clientId, title, desc, dept, ownerId:null, status:'new', priority:$('#req-prio').value, createdAt:Date.now(), stageAt:Date.now(), dueDate:due, recurring:null, attachments:pendingAttachments };
-  S().tasks.push(task);
-  if (pendingVoice){ sendMessageRaw(session.clientId, task.id, '', pendingVoice); }
-  Store.save();
-  const c=clientById(session.clientId);
-  const clientName=c?.name||'Client',company=c?.company||'No client';
-  logActivity(`New brief from ${company} awaiting assignment`,'brief');
-  // notify agency
-  Notify.both({ phone:'+91 agency-team', email:'team@antrajaal.com',
-    waText:`📥 New request from ${clientName} (${company}): "${title}" → awaiting assignment`,
-    emailText:`Subject: New brief — ${title}` });
-  // confirm to client
-  Notify.both({ phone:c.phone, email:c.email,
-    waText:`✅ Hi ${c.name}, we received "${title}". An admin will assign it shortly.`,
-    emailText:`Subject: We got your request — ${title}` });
-  pendingVoice=null;
-  pendingAttachments=[];
-  toast('✅ Request sent — awaiting assignment');
-  go('my-requests');
-}
-function sendMessageRaw(clientId, taskId, text, voice){
-  S().messages.push({ id:Math.random().toString(36).slice(2,9), clientId, taskId, fromId:session.id, fromRole:'client', text, voice, attachments:[], at:Date.now() });
+  if(!pendingVoice){
+    if(submitRequest.pending)return;submitRequest.pending=true;
+    try{
+      const result=await Store.createTask({clientId:session.clientId,title,desc,priority:$('#req-prio').value,
+        dueDate:$('#req-due').value?new Date($('#req-due').value).getTime():Date.now()+86400000,attachments:pendingAttachments});
+      pendingAttachments=[];taskWriteWarnings(result);const client=clientById(session.clientId);taskNotificationToasts('+91 agency-team','team@antrajaal.com');taskNotificationToasts(client?.phone,client?.email);toast('✅ Request sent — awaiting assignment');go('my-requests');
+    }catch(error){toast(error.message);}finally{submitRequest.pending=false;}
+    return;
+  }
+  if(submitRequest.pending)return;submitRequest.pending=true;
+  try{
+    const result=await Store.createBrief({clientId:session.clientId,title,desc,priority:$('#req-prio').value,
+      dueDate:$('#req-due').value?new Date($('#req-due').value).getTime():Date.now()+86400000,attachments:pendingAttachments},pendingVoice);
+    pendingVoice=null;pendingAttachments=[];taskWriteWarnings(result);
+    const client=clientById(session.clientId);taskNotificationToasts('+91 agency-team','team@antrajaal.com');taskNotificationToasts(client?.phone,client?.email);
+    toast('✅ Request sent — awaiting assignment');go('my-requests');
+  }catch(error){toast(error.message);}finally{submitRequest.pending=false;}
 }
 
 /* ============================================================
@@ -1025,13 +1020,13 @@ function openTeamTaskForm(){
   $('#team-task-project',modal).onchange=e=>{const option=e.target.selectedOptions[0];if(option?.dataset.clientId)$('#team-task-client',modal).value=option.dataset.clientId;};
   $('#save-team-task',modal).onclick=async()=>{
     const title=$('[data-pt-title]',row).value.trim(),ownerIds=selectedValues(owner),assignees=ownerIds.map(userById).filter(Boolean);if(!title){toast('Enter a task title');return;}if(!assignees.length){toast('Select at least one assignee');return;}if(row._reading>0){toast('Please wait for attachments to finish loading');return;}
-    const now=Date.now();
     const projectId=$('#team-task-project',modal).value||null,linkedProject=projectById(projectId);
     const dueInput=$('[data-pt-due]',row).value;
     const dept=$('[data-pt-dept]',row).value;if(!dept){toast('Select a department');return;}
-    const task={id:'t_'+Math.random().toString(36).slice(2,9),projectId,clientId:linkedProject?.clientId||$('#team-task-client',modal).value||null,title,desc:$('[data-pt-desc]',row).value.trim(),dept,ownerIds,ownerId:ownerIds[0],status:'todo',priority:$('[data-pt-priority]',row).value,progress:$('[data-pt-progress]',row).value,createdAt:now,stageAt:now,dueDate:dueInput?new Date(dueInput).getTime():null,recurring:null,attachments:row._attachments||[]};
-    const assigneeNames=assignees.map(u=>u.name).join(', ');S().tasks.push(task);try{const result=await Store.save();logActivity(`${session.name} created "${title}" and assigned it to ${assigneeNames}`,'brief');close();render();buildNav();toast(result.assignmentMailFailures?.length?`✅ Task assigned, but an email could not be sent`:`✅ Task assigned to ${assigneeNames}`);}catch(error){await Store.load();render();toast(error.message);}
+    const task={projectId,clientId:linkedProject?.clientId||$('#team-task-client',modal).value||null,title,desc:$('[data-pt-desc]',row).value.trim(),dept,ownerIds,ownerId:ownerIds[0],status:'todo',priority:$('[data-pt-priority]',row).value,progress:$('[data-pt-progress]',row).value,dueDate:dueInput?new Date(dueInput).getTime():null,recurring:null,attachments:row._attachments||[]};
+    const assigneeNames=assignees.map(u=>u.name).join(', ');try{const result=await Store.createTask(task);taskWriteWarnings(result);close();render();buildNav();toast(result.assignmentMailFailures?.length?`✅ Task assigned, but an email could not be sent`:`✅ Task assigned to ${assigneeNames}`);}catch(error){render();toast(error.message);}
   };
+  guardTaskButton($('#save-team-task',modal));
 }
 
 /* ============================================================
@@ -1090,14 +1085,14 @@ function openTask(id){
   bindComposer(modal);
   const saveBtn = modal.querySelector('[data-save-task]');
   if (saveBtn) saveBtn.onclick=async()=>{
-    const ns=$('#m-status').value;
-    if (ns!==t.status){ t.stageAt=Date.now(); logActivity(`${session.name} moved "${t.title}" to ${ns.replace('_',' ')}`,'move');
-      if (ns==='done'&&c){ Notify.both({phone:c.phone,email:c.email,waText:`🎉 Good news ${c.name}! "${t.title}" is completed. Please review.`,emailText:`Subject: Completed — ${t.title}`}); }
-    }
-    t.title=$('#m-title').value.trim();if(!t.title){toast('Task title is required');return;}t.desc=$('#m-desc').value.trim();t.status=ns;t.priority=$('#m-prio').value;t.progress=$('#m-progress').value;
-    const ownerIds=selectedValues($('#m-owner',modal));if(!ownerIds.length){toast('Select at least one assignee');return;}t.ownerIds=ownerIds;t.ownerId=ownerIds[0];if(session.role==='admin'){const projectId=$('#m-project',modal).value||null,project=projectById(projectId);t.projectId=projectId;t.clientId=project?.clientId||$('#m-client',modal).value||null;t.dept=$('#m-dept').value;t.dueDate=$('#m-due').value?new Date($('#m-due').value).getTime():null;}else{t.dueDate=$('#m-due').value?new Date($('#m-due').value).getTime():null;}
-    try{await Store.save();modal.remove();render();buildNav();toast('✅ Task updated');}catch(error){await Store.load();render();toast(error.message);}
+    const title=$('#m-title').value.trim();if(!title){toast('Task title is required');return;}
+    const values={title,desc:$('#m-desc').value.trim(),status:$('#m-status').value,priority:$('#m-prio').value,progress:$('#m-progress').value};
+    const ownerIds=selectedValues($('#m-owner',modal));if(!ownerIds.length){toast('Select at least one assignee');return;}values.ownerIds=ownerIds;
+    if(session.role==='admin'){const projectId=$('#m-project',modal).value||null,project=projectById(projectId);values.projectId=projectId;values.clientId=project?.clientId||$('#m-client',modal).value||null;values.dept=$('#m-dept').value;}
+    const due=$('#m-due',modal);if(due)values.dueDate=due.value?new Date(due.value).getTime():null;
+    try{const result=await Store.saveTaskChanges(t.id,values);taskWriteWarnings(result);if(values.status==='done'&&t.status!=='done'&&c)taskNotificationToasts(c.phone,c.email);modal.remove();render();buildNav();toast('✅ Task updated');}catch(error){render();toast(error.message);}
   };
+  if(saveBtn)guardTaskButton(saveBtn);
   const deleteBtn=modal.querySelector('[data-delete-task]');if(deleteBtn)deleteBtn.onclick=()=>deleteTask(t.id,modal);
 }
 
@@ -1105,8 +1100,7 @@ async function deleteTask(taskId,modal=null){
   const task=S().tasks.find(t=>t.id===taskId);if(!task)return;
   if(session.role!=='admin' && !(session.role==='team'&&isTaskOwner(task,session.id)))return;
   if(!confirm(`Delete "${task.title}"? This cannot be undone.`))return;
-  S().tasks=S().tasks.filter(t=>t.id!==taskId);S().messages.forEach(m=>{if(m.taskId===taskId)m.taskId=null;});
-  try{await Store.save();modal?.remove();render();buildNav();toast('🗑️ Task deleted');}catch(error){await Store.load();render();toast(error.message);}
+  try{const result=await Store.deleteTask(taskId);taskWriteWarnings(result);modal?.remove();render();buildNav();toast('🗑️ Task deleted');}catch(error){render();toast(error.message);}
 }
 
 /* ============================================================
@@ -1130,9 +1124,7 @@ async function completeTask(taskId){
   const task=S().tasks.find(t=>t.id===taskId);if(!task)return;
   if(session.role!=='admin'&&!(session.role==='team'&&isTaskOwner(task,session.id)))return;
   if(task.status==='done'||task.progress==='completed')return;
-  const previous={status:task.status,progress:task.progress,stageAt:task.stageAt};
-  task.status='done';task.progress='completed';task.stageAt=Date.now();
-  try{await Store.save();render();buildNav();logActivity(`${session.name} completed "${task.title}"`,'move');toast('✅ Task completed');}catch(error){Object.assign(task,previous);render();toast(error.message);}
+  try{const result=await Store.saveTaskChanges(taskId,{status:'done',progress:'completed'});taskWriteWarnings(result);render();buildNav();toast('✅ Task completed');}catch(error){render();toast(error.message);}
 }
 
 function openNewTask(){
@@ -1143,7 +1135,8 @@ function openNewTask(){
   $('#modal-host').appendChild(modal);const close=()=>modal.remove();modal.querySelectorAll('[data-close]').forEach(b=>b.onclick=close);modal.onclick=e=>{if(e.target===modal)close();};
   const row=$('[data-project-task]',modal);$('[data-remove-project-task]',row)?.remove();bindProjectTaskFiles($('#new-task-fields',modal));
   $('#task-project',modal).onchange=e=>{const clientId=e.target.selectedOptions[0]?.dataset.clientId;if(clientId)$('#task-client',modal).value=clientId;};
-  $('#create-task',modal).onclick=async()=>{const title=$('[data-pt-title]',row).value.trim(),ownerIds=selectedValues($('[data-pt-owner]',row)),dept=$('[data-pt-dept]',row).value;if(!title){toast('Enter a task title');return;}if(!ownerIds.length){toast('Select at least one assignee');return;}if(!dept){toast('Select a department');return;}if(row._reading>0){toast('Please wait for attachments to finish loading');return;}const projectId=$('#task-project',modal).value||null,project=projectById(projectId),clientId=project?.clientId||$('#task-client',modal).value||null,now=Date.now(),dueInput=$('[data-pt-due]',row).value;S().tasks.push({id:'t_'+Math.random().toString(36).slice(2,9),projectId,clientId,title,desc:$('[data-pt-desc]',row).value.trim(),dept,ownerIds,ownerId:ownerIds[0],status:'todo',priority:$('[data-pt-priority]',row).value,progress:$('[data-pt-progress]',row).value,createdAt:now,stageAt:now,dueDate:dueInput?new Date(dueInput).getTime():null,recurring:null,attachments:row._attachments||[]});try{const result=await Store.save();close();go('tasks');toast(result.assignmentMailFailures?.length?'✅ Task created, but an assignment email could not be sent':'✅ Task created and assigned');}catch(error){await Store.load();render();toast(error.message);}};
+  $('#create-task',modal).onclick=async()=>{const title=$('[data-pt-title]',row).value.trim(),ownerIds=selectedValues($('[data-pt-owner]',row)),dept=$('[data-pt-dept]',row).value;if(!title){toast('Enter a task title');return;}if(!ownerIds.length){toast('Select at least one assignee');return;}if(!dept){toast('Select a department');return;}if(row._reading>0){toast('Please wait for attachments to finish loading');return;}const projectId=$('#task-project',modal).value||null,project=projectById(projectId),clientId=project?.clientId||$('#task-client',modal).value||null,dueInput=$('[data-pt-due]',row).value;const values={projectId,clientId,title,desc:$('[data-pt-desc]',row).value.trim(),dept,ownerIds,ownerId:ownerIds[0],status:'todo',priority:$('[data-pt-priority]',row).value,progress:$('[data-pt-progress]',row).value,dueDate:dueInput?new Date(dueInput).getTime():null,recurring:null,attachments:row._attachments||[]};try{const result=await Store.createTask(values);taskWriteWarnings(result);close();go('tasks');toast(result.assignmentMailFailures?.length?'✅ Task created, but an assignment email could not be sent':'✅ Task created and assigned');}catch(error){render();toast(error.message);}};
+  guardTaskButton($('#create-task',modal));
 }
 
 
@@ -1180,13 +1173,12 @@ function openNewRecurring(taskId=null){
     const title=$('#rc-title').value.trim(); if(!title){toast('Add a title');return;}
     const ownerIds=selectedValues($('#rc-owner',modal)),owners=ownerIds.map(userById).filter(Boolean);if(!owners.length){toast('Select at least one assignee');return;}
     const projectId=$('#rc-project',modal).value||null,project=projectById(projectId),clientId=project?.clientId||$('#rc-client',modal).value||null;
-    const frequency=$('#rc-freq').value,now=Date.now();let nextRecurrenceAt=task?.nextRecurrenceAt;
-    if(!editing||frequency!==task.recurring||!nextRecurrenceAt){const nextDate=new Date(now);if(frequency==='monthly'){const day=nextDate.getDate();nextDate.setDate(1);nextDate.setMonth(nextDate.getMonth()+1);nextDate.setDate(Math.min(day,new Date(nextDate.getFullYear(),nextDate.getMonth()+1,0).getDate()));}else nextDate.setDate(nextDate.getDate()+({daily:1,alternate_days:2,weekly:7}[frequency]));nextRecurrenceAt=nextDate.getTime();}
+    const frequency=$('#rc-freq').value;
     const dueInput=$('#rc-due',modal).value;
-    const values={projectId,clientId,title,dept:owners[0].dept||'General',ownerIds,ownerId:ownerIds[0],dueDate:dueInput?new Date(dueInput).getTime():null,progress:$('#rc-progress',modal).value,recurring:frequency,nextRecurrenceAt};
-    if(editing)Object.assign(task,values);else S().tasks.push({id:Math.random().toString(36).slice(2,9),...values,desc:'Repeating task',status:'todo',priority:'med',progress:'just_started',createdAt:now,stageAt:now});
-    try{await Store.save();modal.remove();render();toast(editing?'✅ Repeating task updated':'🔁 Repeating task created');}catch(error){await Store.load();render();toast(error.message);}
+    const values={projectId,clientId,title,dept:owners[0].dept||'General',ownerIds,ownerId:ownerIds[0],dueDate:dueInput?new Date(dueInput).getTime():null,progress:$('#rc-progress',modal).value,recurring:frequency};
+    try{const result=editing?await Store.saveTaskChanges(task.id,values):await Store.createTask({...values,desc:'Repeating task',status:'todo',priority:'med',progress:'just_started'});taskWriteWarnings(result);modal.remove();render();toast(editing?'✅ Repeating task updated':'🔁 Repeating task created');}catch(error){render();toast(error.message);}
   };
+  guardTaskButton($('#rc-save',modal));
   const deleteBtn=modal.querySelector('[data-delete-recurring]');if(deleteBtn)deleteBtn.onclick=()=>deleteTask(task.id,modal);
 }
 

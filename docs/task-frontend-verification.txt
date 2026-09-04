@@ -1,0 +1,192 @@
+Task frontend migration verification — api branch
+No commit/push/merge/deployment. Git output is cumulative and includes earlier backend work.
+MySQL-only test remains skipped; no production/development database used.
+
+php artisan test (isolated SQLite; process-only pdo_sqlite enabled)
+
+   WARN  Tests\Feature\TaskApiTest
+  ✓ create get update and preserve unrelated fields                                                              7.84s  
+  ✓ missing tasks return 404                                                                                     0.12s  
+  ✓ status and progress values and endpoint isolation                                                            0.11s  
+  ✓ single multiple legacy and invalid assignees                                                                 0.12s  
+  ✓ authorization for assigned team clients and guests                                                           0.07s  
+  ✓ relationships recurrence and attachments                                                                     0.27s  
+  ✓ delete retains conversation and other tasks                                                                  0.07s  
+  ✓ existing state routes and state task serialization                                                           0.06s  
+  ✓ assignment mail reassignment and history are idempotent                                                      0.51s  
+  ✓ completion and client brief notifications are persisted not sent                                             0.07s  
+  ✓ fresh state save and stale api update create delete protection                                               0.58s  
+  ✓ state reassignment uses shared mail without duplicate sends                                                  0.08s  
+  ✓ recurring generation keeps schema values and invalidates state                                               0.04s  
+  ✓ unsafe attachment data and task ids are rejected                                                             0.06s  
+  ✓ mail failure does not rollback task or history                                                               1.60s  
+  ✓ team creation and unassigned admin validation                                                                0.07s  
+  ✓ all task routes require a valid session                                                                      0.05s  
+  - mysql mutex blocks other connections and releases after rollback → Requires the guarded dedicated MySQL tes… 0.84s  
+
+  Tests:    1 skipped, 17 passed (177 assertions)
+  Duration: 17.40s
+
+
+node --test tests/js/*.test.cjs
+✔ assets/js/store.js: serializes snapshots with the latest successful revision (13.3379ms)
+✔ assets/js/store.js: conflict blocks queued stale writes until reload (3.743ms)
+✔ assets/js/store.js: missing revision fails closed without a request (3.274ms)
+✔ public/assets/js/store.js: serializes snapshots with the latest successful revision (10.9194ms)
+✔ public/assets/js/store.js: conflict blocks queued stale writes until reload (2.9594ms)
+✔ public/assets/js/store.js: missing revision fails closed without a request (2.3485ms)
+✔ assets/js/app.js: standalone task handlers contain no legacy task saves or duplicate effects (3.8183ms)
+✔ assets/js/app.js: standalone create form waits for API success without mutating tasks (5.2665ms)
+✔ assets/js/app.js: team task form uses task creation and guards duplicate submission (5.7423ms)
+✔ assets/js/app.js: task modal submits edits without optimistic local mutation (3.7097ms)
+✔ assets/js/app.js: recurring form uses task API and server scheduling (2.8546ms)
+✔ assets/js/app.js: complete and delete never save history through state (3.4284ms)
+✔ assets/js/app.js: brief without voice uses POST and keeps server side effects on the server (1.9463ms)
+✔ assets/js/app.js: failed modal request preserves task and displays server error (4.4515ms)
+✔ public/assets/js/app.js: standalone task handlers contain no legacy task saves or duplicate effects (1.0109ms)
+✔ public/assets/js/app.js: standalone create form waits for API success without mutating tasks (2.5451ms)
+✔ public/assets/js/app.js: team task form uses task creation and guards duplicate submission (2.4207ms)
+✔ public/assets/js/app.js: task modal submits edits without optimistic local mutation (2.6237ms)
+✔ public/assets/js/app.js: recurring form uses task API and server scheduling (2.6589ms)
+✔ public/assets/js/app.js: complete and delete never save history through state (4.0476ms)
+✔ public/assets/js/app.js: brief without voice uses POST and keeps server side effects on the server (1.6155ms)
+✔ public/assets/js/app.js: failed modal request preserves task and displays server error (1.8409ms)
+✔ assets/js/store.js: create sends only a task POST and applies the server ID and fields (9.0223ms)
+✔ assets/js/store.js: edit uses its endpoint and authoritative response without PUT (4.327ms)
+✔ assets/js/store.js: status uses its endpoint and authoritative response without PUT (2.8254ms)
+✔ assets/js/store.js: progress uses its endpoint and authoritative response without PUT (2.0662ms)
+✔ assets/js/store.js: assignees uses its endpoint and authoritative response without PUT (1.6256ms)
+✔ assets/js/store.js: delete waits for success then removes the task and detaches messages (11.6566ms)
+✔ assets/js/store.js: 403 preserves local task and surfaces validation errors (3.6389ms)
+✔ assets/js/store.js: 404 preserves local task and surfaces validation errors (2.6387ms)
+✔ assets/js/store.js: 409 preserves local task and surfaces validation errors (2.9999ms)
+✔ assets/js/store.js: 422 preserves local task and surfaces validation errors (8.2901ms)
+✔ assets/js/store.js: failed create and delete cannot appear locally successful (3.6832ms)
+✔ assets/js/store.js: modal changes use dedicated endpoints, send only changes, and assign last (5.6612ms)
+✔ assets/js/store.js: later non-task saves remain available with the refreshed revision (4.5616ms)
+✔ assets/js/store.js: old queued state snapshots cannot overwrite a successful targeted task (2.6922ms)
+✔ assets/js/store.js: unrelated local edits survive refresh; conflicting remote edits fail closed (2.2067ms)
+✔ assets/js/store.js: refresh failure keeps committed response and never retries creation (1.9847ms)
+✔ assets/js/store.js: team creation omits null recurrence without changing update clearing semantics (3.6302ms)
+✔ assets/js/store.js: status-only modal change does not send an empty description patch (4.1062ms)
+✔ assets/js/store.js: partial multi-endpoint failure retains confirmed server changes (3.0749ms)
+✔ assets/js/store.js: session refresh retries only a definite CSRF failure (3.1433ms)
+✔ public/assets/js/store.js: create sends only a task POST and applies the server ID and fields (3.376ms)
+✔ public/assets/js/store.js: edit uses its endpoint and authoritative response without PUT (1.7669ms)
+✔ public/assets/js/store.js: status uses its endpoint and authoritative response without PUT (1.6077ms)
+✔ public/assets/js/store.js: progress uses its endpoint and authoritative response without PUT (3.8373ms)
+✔ public/assets/js/store.js: assignees uses its endpoint and authoritative response without PUT (2.5437ms)
+✔ public/assets/js/store.js: delete waits for success then removes the task and detaches messages (19.7644ms)
+✔ public/assets/js/store.js: 403 preserves local task and surfaces validation errors (1.9515ms)
+✔ public/assets/js/store.js: 404 preserves local task and surfaces validation errors (1.4338ms)
+✔ public/assets/js/store.js: 409 preserves local task and surfaces validation errors (1.5255ms)
+✔ public/assets/js/store.js: 422 preserves local task and surfaces validation errors (1.4424ms)
+✔ public/assets/js/store.js: failed create and delete cannot appear locally successful (3.17ms)
+✔ public/assets/js/store.js: modal changes use dedicated endpoints, send only changes, and assign last (3.6514ms)
+✔ public/assets/js/store.js: later non-task saves remain available with the refreshed revision (1.8714ms)
+✔ public/assets/js/store.js: old queued state snapshots cannot overwrite a successful targeted task (2.39ms)
+✔ public/assets/js/store.js: unrelated local edits survive refresh; conflicting remote edits fail closed (1.6583ms)
+✔ public/assets/js/store.js: refresh failure keeps committed response and never retries creation (2.7103ms)
+✔ public/assets/js/store.js: team creation omits null recurrence without changing update clearing semantics (2.5126ms)
+✔ public/assets/js/store.js: status-only modal change does not send an empty description patch (3.1482ms)
+✔ public/assets/js/store.js: partial multi-endpoint failure retains confirmed server changes (2.6641ms)
+✔ public/assets/js/store.js: session refresh retries only a definite CSRF failure (2.2168ms)
+ℹ tests 62
+ℹ suites 0
+ℹ pass 62
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 408.2063
+
+php artisan route:list
+
+  GET|HEAD  api/chat-attachment ................................................... StateController@showChatAttachment
+  POST      api/chat-attachments ............................................... StateController@uploadChatAttachments
+  POST      api/chat-email ............................................................. StateController@sendChatEmail
+  GET|HEAD  api/google-calendar/callback ........................................... GoogleCalendarController@callback
+  GET|HEAD  api/google-calendar/connect ............................................. GoogleCalendarController@connect
+  DELETE    api/google-calendar/disconnect ....................................... GoogleCalendarController@disconnect
+  GET|HEAD  api/google-calendar/events ............................................... GoogleCalendarController@events
+  GET|HEAD  api/google-calendar/status ............................................... GoogleCalendarController@status
+  POST      api/recurring-tasks/generate ...................................... StateController@generateRecurringTasks
+  GET|HEAD  api/session ...................................................................... StateController@session
+  POST      api/session ....................................................................... StateController@signIn
+  DELETE    api/session ...................................................................... StateController@signOut
+  GET|HEAD  api/state ........................................................................... StateController@show
+  PUT       api/state ......................................................................... StateController@update
+  POST      api/state/reset .................................................................... StateController@reset
+  POST      api/tasks ........................................................................... TaskController@store
+  GET|HEAD  api/tasks/{id} ....................................................................... TaskController@show
+  PATCH     api/tasks/{id} ..................................................................... TaskController@update
+  DELETE    api/tasks/{id} .................................................................... TaskController@destroy
+  PATCH     api/tasks/{id}/assignees ........................................................ TaskController@assignees
+  PATCH     api/tasks/{id}/progress .......................................................... TaskController@progress
+  PATCH     api/tasks/{id}/status .............................................................. TaskController@status
+  POST      api/team-member-image .............................................. StateController@uploadTeamMemberImage
+  GET|HEAD  api/team-member-image ................................................ StateController@showTeamMemberImage
+  GET|HEAD  storage/{path} storage.local › vendor/laravel/framework/src/Illuminate/Filesystem/FilesystemServiceProvid…
+  PUT       storage/{path} storage.local.upload › vendor/laravel/framework/src/Illuminate/Filesystem/FilesystemServic…
+  GET|HEAD  up ........... vendor/laravel/framework/src/Illuminate/Foundation/Configuration/ApplicationBuilder.php:219
+  GET|HEAD  {path?} .................................................................................................. 
+
+                                                                                                   Showing [28] routes
+
+
+node --check (both app/store copies); git diff --check; git status; git diff --stat
+warning: in the working copy of 'app/Http/Controllers/StateController.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/Services/RecurringTaskGenerator.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'assets/js/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'assets/js/store.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'public/assets/js/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'public/assets/js/store.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'resources/views/app.blade.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'routes/web.php', LF will be replaced by CRLF the next time Git touches it
+On branch api
+Your branch is up to date with 'origin/api'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   app/Http/Controllers/StateController.php
+	modified:   app/Services/RecurringTaskGenerator.php
+	modified:   assets/js/app.js
+	modified:   assets/js/store.js
+	modified:   public/assets/js/app.js
+	modified:   public/assets/js/store.js
+	modified:   resources/views/app.blade.php
+	modified:   routes/web.php
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	app/Http/Controllers/TaskController.php
+	app/Mail/
+	app/Services/StateConcurrency.php
+	app/Services/TaskEffects.php
+	app/Services/TaskService.php
+	docs/
+	phpunit.xml
+	resources/views/emails/
+	tests/
+
+no changes added to commit (use "git add" and/or "git commit -a")
+warning: in the working copy of 'app/Http/Controllers/StateController.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/Services/RecurringTaskGenerator.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'assets/js/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'assets/js/store.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'public/assets/js/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'public/assets/js/store.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'resources/views/app.blade.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'routes/web.php', LF will be replaced by CRLF the next time Git touches it
+ app/Http/Controllers/StateController.php | 102 ++++++-----------
+ app/Services/RecurringTaskGenerator.php  |   4 +-
+ assets/js/app.js                         |  63 +++++++----
+ assets/js/store.js                       | 152 ++++++++++++++++++++++++-
+ public/assets/js/app.js                  |  63 +++++++----
+ public/assets/js/store.js                | 187 ++++++++++++++++++++++++-------
+ resources/views/app.blade.php            |   4 +-
+ routes/web.php                           |   8 ++
+ 8 files changed, 421 insertions(+), 162 deletions(-)
+
+

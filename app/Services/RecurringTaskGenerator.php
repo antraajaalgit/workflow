@@ -14,7 +14,7 @@ class RecurringTaskGenerator
         $nowMs = $at->getTimestampMs();
         $created = 0;
 
-        DB::transaction(function () use ($nowMs, &$created): void {
+        app(StateConcurrency::class)->run(function () use ($nowMs, &$created): void {
             $templates = DB::table('tasks')
                 ->whereNotNull('recurring')
                 ->whereNotNull('next_recurrence_at_ms')
@@ -65,7 +65,7 @@ class RecurringTaskGenerator
         return in_array($frequency, ['daily', 'alternate_days', 'weekly', 'monthly'], true);
     }
 
-    private function nextRunMs(int $fromMs, string $frequency): int
+    public function nextRunMs(int $fromMs, string $frequency): int
     {
         $from = CarbonImmutable::createFromTimestampMs($fromMs);
 
