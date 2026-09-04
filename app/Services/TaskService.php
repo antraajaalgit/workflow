@@ -70,6 +70,8 @@ class TaskService
                 'stage_at_ms' => $now, 'due_date_ms' => null, 'recurring' => null,
                 'next_recurrence_at_ms' => null, 'attachments' => []];
             $data = $this->relationships($data);
+            // A newly created completed task must receive its full retention period.
+            if ($data['status'] === 'done') $data['stage_at_ms'] = $now;
             DB::table('tasks')->insert($this->encode($data) + ['created_at' => now(), 'updated_at' => now()]);
 
             $after = $this->find($data['id']);
@@ -92,6 +94,10 @@ class TaskService
                 abort_if(array_intersect(array_keys($data), ['client_id', 'project_id', 'department', 'recurring', 'next_recurrence_at_ms']), 403, 'Admin access required for these fields.');
             }
             if (isset($data['status']) && $data['status'] !== $task['status']) {
+                $data['stage_at_ms'] = now()->getTimestampMs();
+            }
+            if (($data['status'] ?? $task['status']) === 'done' && ($data['progress'] ?? $task['progress']) === 'completed'
+                && $task['progress'] !== 'completed') {
                 $data['stage_at_ms'] = now()->getTimestampMs();
             }
             $merged = $this->relationships(array_replace($task, $data), $task);
@@ -121,10 +127,42 @@ class TaskService
             $actor = $this->freshActor($actor);
             $task = $this->find($id, true);
             $this->authorize($actor, $task);
-            // Preserve task conversations, matching the dashboard and foreign key.
-            DB::table('messages')->where('task_id', $id)->update(['task_id' => null]);
-            DB::table('tasks')->where('id', $id)->delete();
-            app(TaskEffects::class)->record($task, null, $actor);
+            $this->deleteRecords($task, $actor);
+        });
+    }
+
+    public function completedBefore(int $cutoff): \Illuminate\Database\Query\Builder
+    {
+        return DB::table('tasks')->where('status', 'done')->where('progress', 'completed')
+            ->where('stage_at_ms', '<=', $cutoff)
+            ->where(fn ($query) => $query->whereNull('recurring')->orWhere('recurring', ''))
+            ->whereNull('next_recurrence_at_ms');
+    }
+
+    /** Trusted maintenance entry point; not exposed as an HTTP authorization bypass. */
+    public function purgeCompleted(string $id, int $cutoff): bool
+    {
+        $cutoff = min($cutoff, now()->getTimestampMs() - CompletedTaskPurger::RETENTION_MS);
+        return app(StateConcurrency::class)->run(function () use ($id, $cutoff) {
+            if (! $this->completedBefore($cutoff)->where('id', $id)->lockForUpdate()->first()) return false;
+            $this->deleteRecords($this->find($id), (object) ['name' => 'Scheduled cleanup', 'role' => 'system']);
+            return true;
+        });
+    }
+
+    private function deleteRecords(array $task, object $actor): void
+    {
+        $cleanup = app(TaskAttachmentCleanup::class);
+        $paths = $cleanup->enqueue($task['attachments']);
+        // Preserve conversations and global audit/notification history.
+        DB::table('messages')->where('task_id', $task['id'])->update(['task_id' => null]);
+        DB::table('tasks')->where('id', $task['id'])->delete();
+        app(TaskEffects::class)->record($task, null, $actor);
+        if ($paths) DB::afterCommit(function () use ($cleanup, $paths) {
+            try { $cleanup->drain($paths); }
+            catch (\Throwable $exception) {
+                \Illuminate\Support\Facades\Log::warning('Task attachment cleanup awaits retry.', ['error_type' => $exception::class]);
+            }
         });
     }
 

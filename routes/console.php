@@ -17,3 +17,7 @@ Artisan::command('nagare:generate-recurring-tasks', function (RecurringTaskGener
 Schedule::command('nagare:generate-recurring-tasks')
     ->everyMinute()
     ->withoutOverlapping();
+
+Schedule::command('tasks:purge-completed')
+    ->dailyAt('03:00')
+    ->withoutOverlapping();

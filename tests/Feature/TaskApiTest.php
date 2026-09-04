@@ -16,6 +16,7 @@ use Tests\IsolatedDatabase;
 class TaskApiTest extends TestCase
 {
     use CompoundTaskAssertions;
+    use CompletedTaskCleanupAssertions;
     private ?IsolatedDatabase $testDatabase = null;
 
     protected function setUp(): void
@@ -45,6 +46,7 @@ class TaskApiTest extends TestCase
     protected function tearDown(): void
     {
         try {
+            $this->travelBack();
             $this->testDatabase?->cleanup();
         } finally {
             parent::tearDown();

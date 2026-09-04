@@ -1,0 +1,230 @@
+Completed-task cleanup verification: isolated SQLite and fake storage only. Normal database never purged.
+php artisan test
+
+   WARN  Tests\Feature\TaskApiTest
+  ✓ create get update and preserve unrelated fields                                                              0.28s  
+  ✓ missing tasks return 404                                                                                     0.05s  
+  ✓ status and progress values and endpoint isolation                                                            0.07s  
+  ✓ single multiple legacy and invalid assignees                                                                 0.06s  
+  ✓ authorization for assigned team clients and guests                                                           0.05s  
+  ✓ relationships recurrence and attachments                                                                     0.06s  
+  ✓ delete retains conversation and other tasks                                                                  0.04s  
+  ✓ existing state routes and state task serialization                                                           0.04s  
+  ✓ assignment mail reassignment and history are idempotent                                                      0.05s  
+  ✓ completion and client brief notifications are persisted not sent                                             0.04s  
+  ✓ fresh state save and stale api update create delete protection                                               0.11s  
+  ✓ state reassignment is ignored without sending mail                                                           0.09s  
+  ✓ recurring generation keeps schema values and invalidates state                                               0.05s  
+  ✓ unsafe attachment data and task ids are rejected                                                             0.04s  
+  ✓ mail failure does not rollback task or history                                                               0.05s  
+  ✓ team creation and unassigned admin validation                                                                0.05s  
+  ✓ all task routes require a valid session                                                                      0.04s  
+  - mysql mutex blocks other connections and releases after rollback → Requires the guarded dedicated MySQL tes… 0.04s  
+  ✓ atomic multi field edit and completion                                                                       0.04s  
+  ✓ task effect failure rolls back task and email                                                                0.04s  
+  ✓ project grid creates edits assigns and deletes atomically                                                    0.07s  
+  ✓ project grid later failure rolls back earlier rows and emails                                                0.05s  
+  ✓ project grid rejects foreign task and stale revision                                                         0.04s  
+  ✓ voice brief creates message task history and notifications together                                          0.03s  
+  ✓ voice brief message failure rolls back all side effects                                                      0.03s  
+  ✓ voice brief validates voice and uses client authorization                                                    0.04s  
+  ✓ project deletion rolls back on failure then detaches messages                                                0.05s  
+  ✓ client profile project link and unlink update all tasks                                                      0.06s  
+  ✓ client profile link failure rolls back profile login and tasks                                               0.05s  
+  ✓ client deletion is atomic for projects tasks messages and accounts                                           0.05s  
+  ✓ member removal is atomic and preserves other owners without email                                            0.07s  
+  ✓ department rename rollback and deletion fallback                                                             0.12s  
+  ✓ state ignores missing forged or empty tasks and preserves foreign keys                                       0.16s  
+  ✓ compound routes reject team clients and guests                                                               0.11s  
+  ✓ client creation is atomic with login and project link                                                        0.71s  
+  - mysql json milliseconds and nested advisory lock → Requires the guarded dedicated MySQL test configuration.  0.03s  
+  ✓ cleanup exact elapsed 30 day boundaries and mixed tasks                                                      0.12s  
+  ✓ cleanup reopened and recompleted task restart server timer                                                   0.05s  
+  ✓ cleanup new completed tasks and late progress receive full retention                                         0.04s  
+  ✓ cleanup preserves detached conversations history and notifications                                           0.03s  
+  ✓ cleanup deletes exclusive files and inline metadata only after commit                                        0.04s  
+  ✓ cleanup preserves files shared by task message or other entity                                               0.05s  
+  ✓ cleanup path traversal and unrelated files are never deleted                                                 0.04s  
+  ✓ cleanup filesystem failure remains durable and retries without worker                                        0.05s  
+  ✓ cleanup database failure preserves task file and relationships and continues                                 0.05s  
+  ✓ cleanup preserves recurring template and future generation                                                   0.04s  
+  ✓ cleanup batches string ids and dry run changes nothing                                                       0.21s  
+  ✓ cleanup rechecks eligibility under lock and cannot resurrect through state                                   0.06s  
+  ✓ cleanup schedule preserves recurring schedule and manual deletion uses same files cleanup                    0.04s  
+  ✓ cleanup dry run does not drain file queue and retry rechecks sharing                                         0.04s  
+  ✓ cleanup retry after unlink and database acknowledgement failure                                              0.05s  
+  ✓ cleanup outer rollback preserves file and discards deletion intent                                           0.04s  
+
+  Tests:    2 skipped, 50 passed (459 assertions)
+  Duration: 4.10s
+
+
+node --test tests/js/*.test.cjs
+✔ assets/js/store.js: create project grid makes one request and adopts authoritative state (6.3349ms)
+✔ assets/js/store.js: edit project grid makes one request and adopts authoritative state (2.2947ms)
+✔ assets/js/store.js: delete project makes one request and adopts authoritative state (3.5225ms)
+✔ assets/js/store.js: create client and link project makes one request and adopts authoritative state (2.2738ms)
+✔ assets/js/store.js: edit client and link project makes one request and adopts authoritative state (2.2204ms)
+✔ assets/js/store.js: delete client makes one request and adopts authoritative state (2.3607ms)
+✔ assets/js/store.js: remove member makes one request and adopts authoritative state (2.0398ms)
+✔ assets/js/store.js: create department makes one request and adopts authoritative state (1.9635ms)
+✔ assets/js/store.js: rename department makes one request and adopts authoritative state (1.5703ms)
+✔ assets/js/store.js: delete department makes one request and adopts authoritative state (1.6515ms)
+✔ assets/js/store.js: voice brief makes one request and adopts authoritative state (2.4425ms)
+✔ assets/js/store.js: failed compound 403 preserves local records (1.8744ms)
+✔ assets/js/store.js: failed compound 404 preserves local records (1.4679ms)
+✔ assets/js/store.js: failed compound 409 preserves local records (1.7325ms)
+✔ assets/js/store.js: failed compound 422 preserves local records (2.5994ms)
+✔ assets/js/store.js: failed compound 500 preserves local records (1.3701ms)
+✔ assets/js/store.js: compound success blocks an already queued old full-state save (1.7949ms)
+✔ assets/js/store.js: compound sync preserves unrelated drafts and detects concurrent changes (3.4355ms)
+✔ assets/js/store.js: modal revision is not silently upgraded before submitting a compound action (1.949ms)
+✔ public/assets/js/store.js: create project grid makes one request and adopts authoritative state (3.6996ms)
+✔ public/assets/js/store.js: edit project grid makes one request and adopts authoritative state (2.3686ms)
+✔ public/assets/js/store.js: delete project makes one request and adopts authoritative state (2.0448ms)
+✔ public/assets/js/store.js: create client and link project makes one request and adopts authoritative state (1.7444ms)
+✔ public/assets/js/store.js: edit client and link project makes one request and adopts authoritative state (2.7061ms)
+✔ public/assets/js/store.js: delete client makes one request and adopts authoritative state (1.4756ms)
+✔ public/assets/js/store.js: remove member makes one request and adopts authoritative state (1.8283ms)
+✔ public/assets/js/store.js: create department makes one request and adopts authoritative state (1.9157ms)
+✔ public/assets/js/store.js: rename department makes one request and adopts authoritative state (2.1075ms)
+✔ public/assets/js/store.js: delete department makes one request and adopts authoritative state (1.94ms)
+✔ public/assets/js/store.js: voice brief makes one request and adopts authoritative state (2.2477ms)
+✔ public/assets/js/store.js: failed compound 403 preserves local records (1.934ms)
+✔ public/assets/js/store.js: failed compound 404 preserves local records (2.1539ms)
+✔ public/assets/js/store.js: failed compound 409 preserves local records (1.9415ms)
+✔ public/assets/js/store.js: failed compound 422 preserves local records (3.1611ms)
+✔ public/assets/js/store.js: failed compound 500 preserves local records (1.7832ms)
+✔ public/assets/js/store.js: compound success blocks an already queued old full-state save (1.7509ms)
+✔ public/assets/js/store.js: compound sync preserves unrelated drafts and detects concurrent changes (2.8202ms)
+✔ public/assets/js/store.js: modal revision is not silently upgraded before submitting a compound action (1.902ms)
+✔ assets/js/store.js: serializes snapshots with the latest successful revision (10.4423ms)
+✔ assets/js/store.js: conflict blocks queued stale writes until reload (2.6671ms)
+✔ assets/js/store.js: missing revision fails closed without a request (2.7092ms)
+✔ public/assets/js/store.js: serializes snapshots with the latest successful revision (6.0167ms)
+✔ public/assets/js/store.js: conflict blocks queued stale writes until reload (1.5359ms)
+✔ public/assets/js/store.js: missing revision fails closed without a request (1.4125ms)
+✔ assets/js/app.js: standalone task handlers contain no legacy task saves or duplicate effects (3.0897ms)
+✔ assets/js/app.js: standalone create form waits for API success without mutating tasks (2.4631ms)
+✔ assets/js/app.js: team task form uses task creation and guards duplicate submission (1.8532ms)
+✔ assets/js/app.js: task modal submits edits without optimistic local mutation (2.859ms)
+✔ assets/js/app.js: recurring form uses task API and server scheduling (2.6303ms)
+✔ assets/js/app.js: complete and delete never save history through state (4.7761ms)
+✔ assets/js/app.js: brief without voice uses POST and keeps server side effects on the server (1.4866ms)
+✔ assets/js/app.js: failed modal request preserves task and displays server error (1.4877ms)
+✔ assets/js/app.js: client profile form submits project linking and login in one action (2.9289ms)
+✔ assets/js/app.js: department form uses transactional action without local renames (2.3651ms)
+✔ assets/js/app.js: compound delete handlers wait for server and preserve local tasks (2.7416ms)
+✔ assets/js/app.js: project grid uses one compound action without local mutation (2.6448ms)
+✔ assets/js/app.js: voice brief uses one compound action and retains draft on failure (1.2688ms)
+✔ assets/js/app.js: every migrated compound handler excludes full-state saves and local task mutation (0.5481ms)
+✔ public/assets/js/app.js: standalone task handlers contain no legacy task saves or duplicate effects (0.5982ms)
+✔ public/assets/js/app.js: standalone create form waits for API success without mutating tasks (1.9555ms)
+✔ public/assets/js/app.js: team task form uses task creation and guards duplicate submission (2.4803ms)
+✔ public/assets/js/app.js: task modal submits edits without optimistic local mutation (2.6783ms)
+✔ public/assets/js/app.js: recurring form uses task API and server scheduling (1.9866ms)
+✔ public/assets/js/app.js: complete and delete never save history through state (1.935ms)
+✔ public/assets/js/app.js: brief without voice uses POST and keeps server side effects on the server (1.7189ms)
+✔ public/assets/js/app.js: failed modal request preserves task and displays server error (1.6872ms)
+✔ public/assets/js/app.js: client profile form submits project linking and login in one action (1.573ms)
+✔ public/assets/js/app.js: department form uses transactional action without local renames (1.4849ms)
+✔ public/assets/js/app.js: compound delete handlers wait for server and preserve local tasks (1.4049ms)
+✔ public/assets/js/app.js: project grid uses one compound action without local mutation (2.173ms)
+✔ public/assets/js/app.js: voice brief uses one compound action and retains draft on failure (1.3285ms)
+✔ public/assets/js/app.js: every migrated compound handler excludes full-state saves and local task mutation (0.3945ms)
+✔ assets/js/store.js: create sends only a task POST and applies the server ID and fields (8.8399ms)
+✔ assets/js/store.js: edit uses its endpoint and authoritative response without PUT (4.219ms)
+✔ assets/js/store.js: status uses its endpoint and authoritative response without PUT (2.7818ms)
+✔ assets/js/store.js: progress uses its endpoint and authoritative response without PUT (2.6377ms)
+✔ assets/js/store.js: assignees uses its endpoint and authoritative response without PUT (2.715ms)
+✔ assets/js/store.js: delete waits for success then removes the task and detaches messages (10.6496ms)
+✔ assets/js/store.js: 403 preserves local task and surfaces validation errors (2.1968ms)
+✔ assets/js/store.js: 404 preserves local task and surfaces validation errors (2.0036ms)
+✔ assets/js/store.js: 409 preserves local task and surfaces validation errors (2.2782ms)
+✔ assets/js/store.js: 422 preserves local task and surfaces validation errors (1.8273ms)
+✔ assets/js/store.js: failed create and delete cannot appear locally successful (1.6567ms)
+✔ assets/js/store.js: modal changes use one atomic PATCH and send only changed fields (2.1426ms)
+✔ assets/js/store.js: later non-task saves remain available with the refreshed revision (1.9139ms)
+✔ assets/js/store.js: old queued state snapshots cannot overwrite a successful targeted task (2.554ms)
+✔ assets/js/store.js: unrelated local edits survive refresh; conflicting remote edits fail closed (2.2784ms)
+✔ assets/js/store.js: refresh failure keeps committed response and never retries creation (2.5938ms)
+✔ assets/js/store.js: team creation omits null recurrence without changing update clearing semantics (3.0509ms)
+✔ assets/js/store.js: status-only modal change does not send an empty description patch (2.447ms)
+✔ assets/js/store.js: failed atomic completion changes neither status nor progress (4.0889ms)
+✔ assets/js/store.js: session refresh retries only a definite CSRF failure (2.8076ms)
+✔ public/assets/js/store.js: create sends only a task POST and applies the server ID and fields (7.2984ms)
+✔ public/assets/js/store.js: edit uses its endpoint and authoritative response without PUT (4.0269ms)
+✔ public/assets/js/store.js: status uses its endpoint and authoritative response without PUT (2.519ms)
+✔ public/assets/js/store.js: progress uses its endpoint and authoritative response without PUT (2.3508ms)
+✔ public/assets/js/store.js: assignees uses its endpoint and authoritative response without PUT (2.3136ms)
+✔ public/assets/js/store.js: delete waits for success then removes the task and detaches messages (10.3773ms)
+✔ public/assets/js/store.js: 403 preserves local task and surfaces validation errors (1.454ms)
+✔ public/assets/js/store.js: 404 preserves local task and surfaces validation errors (1.3304ms)
+✔ public/assets/js/store.js: 409 preserves local task and surfaces validation errors (2.1903ms)
+✔ public/assets/js/store.js: 422 preserves local task and surfaces validation errors (1.6209ms)
+✔ public/assets/js/store.js: failed create and delete cannot appear locally successful (1.2951ms)
+✔ public/assets/js/store.js: modal changes use one atomic PATCH and send only changed fields (1.5915ms)
+✔ public/assets/js/store.js: later non-task saves remain available with the refreshed revision (1.5274ms)
+✔ public/assets/js/store.js: old queued state snapshots cannot overwrite a successful targeted task (1.3489ms)
+✔ public/assets/js/store.js: unrelated local edits survive refresh; conflicting remote edits fail closed (2.5635ms)
+✔ public/assets/js/store.js: refresh failure keeps committed response and never retries creation (1.2571ms)
+✔ public/assets/js/store.js: team creation omits null recurrence without changing update clearing semantics (1.4512ms)
+✔ public/assets/js/store.js: status-only modal change does not send an empty description patch (1.3766ms)
+✔ public/assets/js/store.js: failed atomic completion changes neither status nor progress (1.2916ms)
+✔ public/assets/js/store.js: session refresh retries only a definite CSRF failure (1.3844ms)
+ℹ tests 112
+ℹ suites 0
+ℹ pass 112
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 267.3545
+
+php artisan schedule:list (read-only)
+
+  * * * * *  php artisan nagare:generate-recurring-tasks ............................... Next Due: 46 seconds from now
+  0 3 * * *  php artisan tasks:purge-completed ........................................... Next Due: 11 hours from now
+
+
+Relevant PHP syntax checks
+No syntax errors detected in app/Console/Commands/PurgeCompletedTasks.php
+No syntax errors detected in app/Services/CompletedTaskPurger.php
+No syntax errors detected in app/Services/TaskAttachmentCleanup.php
+No syntax errors detected in app/Services/TaskService.php
+No syntax errors detected in routes/console.php
+No syntax errors detected in database/migrations/2026_09_04_000000_create_task_attachment_deletions_table.php
+No syntax errors detected in tests/Feature/CompletedTaskCleanupAssertions.php
+No syntax errors detected in tests/Feature/TaskApiTest.php
+git status
+On branch api
+Your branch is up to date with 'origin/api'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   app/Services/TaskService.php
+	modified:   routes/console.php
+	modified:   tests/Feature/TaskApiTest.php
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	app/Console/
+	app/Services/CompletedTaskPurger.php
+	app/Services/TaskAttachmentCleanup.php
+	database/migrations/2026_09_04_000000_create_task_attachment_deletions_table.php
+	docs/completed-task-cleanup-verification.txt
+	docs/completed-task-cleanup.md
+	tests/Feature/CompletedTaskCleanupAssertions.php
+
+no changes added to commit (use "git add" and/or "git commit -a")
+
+git diff --stat
+warning: in the working copy of 'app/Services/TaskService.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'routes/console.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/Feature/TaskApiTest.php', LF will be replaced by CRLF the next time Git touches it
+ app/Services/TaskService.php  | 46 +++++++++++++++++++++++++++++++++++++++----
+ routes/console.php            |  4 ++++
+ tests/Feature/TaskApiTest.php |  2 ++
+ 3 files changed, 48 insertions(+), 4 deletions(-)
+
