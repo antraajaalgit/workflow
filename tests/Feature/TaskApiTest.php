@@ -17,11 +17,13 @@ class TaskApiTest extends TestCase
 {
     use CompoundTaskAssertions;
     use CompletedTaskCleanupAssertions;
+    use McpToolAssertions;
     private ?IsolatedDatabase $testDatabase = null;
 
     protected function setUp(): void
     {
         parent::setUp();
+        $this->configureMcpTestAllowlist();
         Mail::fake();
         config(['session.driver' => 'array', 'cache.default' => 'array', 'mail.default' => 'array']);
         $this->testDatabase = new IsolatedDatabase;
@@ -47,6 +49,7 @@ class TaskApiTest extends TestCase
     {
         try {
             $this->travelBack();
+            $this->restoreMcpTestAllowlist();
             $this->testDatabase?->cleanup();
         } finally {
             parent::tearDown();

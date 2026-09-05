@@ -73,7 +73,7 @@ trait CompoundTaskAssertions
         $this->patchJson('/api/projects/'.$id.'/tasks', $this->grid(['delete_ids' => [$task]]))->assertOk();
         $this->assertDatabaseMissing('tasks', ['id' => $task]);
         $this->assertDatabaseCount('tasks', 1);
-        $this->assertDatabaseHas('activities', ['text' => 'Project "Project" updated with 1 assigned task']);
+        $this->assertDatabaseHas('activities', ['text' => 'admin updated project "Project" with 1 assigned task']);
     }
 
     public function test_project_grid_later_failure_rolls_back_earlier_rows_and_emails(): void

@@ -47,4 +47,8 @@ Route::prefix('api')->group(function () {
     });
 });
 
+Route::get('/login', function () {
+    return redirect('/');
+})->name('login');
+
 Route::view('/{path?}', 'app')->where('path', '^(?!api).*$');

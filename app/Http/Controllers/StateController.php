@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Support\Facades\Auth;
 use App\Services\RecurringTaskGenerator;
 use App\Services\StateConcurrency;
 use Database\Seeders\DatabaseSeeder;
@@ -165,12 +166,25 @@ class StateController extends Controller
         return app(StateConcurrency::class)->run(fn () => response()->json($this->state()));
     }
 
+    // public function session(Request $request): JsonResponse
+    // {
+    //     $id = $request->session()->get('nagare_user_id');
+    //     $user = $id ? DB::table('users')->where('id', $id)->first() : null;
+    //     return response()->json(['userId' => $user?->id, 'user' => $user ? $this->publicUser($user) : null, 'csrfToken' => csrf_token()]);
+    // }
+
     public function session(Request $request): JsonResponse
-    {
-        $id = $request->session()->get('nagare_user_id');
-        $user = $id ? DB::table('users')->where('id', $id)->first() : null;
-        return response()->json(['userId' => $user?->id, 'user' => $user ? $this->publicUser($user) : null, 'csrfToken' => csrf_token()]);
-    }
+{
+    $id = $request->session()->get('nagare_user_id');
+    $user = $id ? DB::table('users')->where('id', $id)->first() : null;
+
+    return response()->json([
+        'userId' => $user?->id,
+        
+        'user' => $user ? $this->publicUser($user) : null,
+        'csrfToken' => csrf_token(),
+    ]);
+}
 
     public function signIn(Request $request): JsonResponse
     {
@@ -181,14 +195,29 @@ class StateController extends Controller
         }
         $request->session()->regenerate();
         $request->session()->put('nagare_user_id', $user->id);
+
+        Auth::loginUsingId($user->id);
         return response()->json(['userId' => $user->id, 'user' => $this->publicUser($user), 'csrfToken' => csrf_token()]);
     }
 
+    // public function signOut(Request $request): JsonResponse
+    // {
+    //     $request->session()->invalidate(); $request->session()->regenerateToken();
+    //     return response()->json(['signedOut' => true, 'csrfToken' => csrf_token()]);
+    // }
+
     public function signOut(Request $request): JsonResponse
-    {
-        $request->session()->invalidate(); $request->session()->regenerateToken();
-        return response()->json(['signedOut' => true, 'csrfToken' => csrf_token()]);
-    }
+{
+    Auth::logout();
+
+    $request->session()->invalidate();
+    $request->session()->regenerateToken();
+
+    return response()->json([
+        'signedOut' => true,
+        'csrfToken' => csrf_token(),
+    ]);
+}
 
     public function state(): array
     {

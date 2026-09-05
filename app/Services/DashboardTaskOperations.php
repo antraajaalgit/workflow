@@ -30,13 +30,22 @@ class DashboardTaskOperations
         }
     }
 
-    private function activity(string $text): void
-    {
-        DB::table('activities')->insert(['id' => (string) Str::uuid(), 'text' => $text, 'type' => 'brief',
-            'occurred_at_ms' => now()->getTimestampMs(), 'created_at' => now(), 'updated_at' => now()]);
-    }
+    
 
-    public function project(Request $request, object $actor, ?string $id): void
+    private function activity(string $text, object $actor): void
+{
+    DB::table('activities')->insert([
+        'id' => (string) Str::uuid(),
+        'text' => ($actor->name ?? 'Unknown admin').' '.$text,
+        'type' => 'brief',
+        'occurred_at_ms' => now()->getTimestampMs(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+}
+
+    //public function project(Request $request, object $actor, ?string $id): void
+    public function project(Request $request, object $actor, ?string $id): array
     {
         $project = $id ? $this->row('projects', $id) : null;
         $data = $request->validate([
@@ -71,14 +80,22 @@ class DashboardTaskOperations
         }
         // Also retain correct relationships for tasks not present in this form.
         $this->changeTasks(DB::table('tasks')->where('project_id', $id)->whereNotIn('id', $retained), ['client_id' => $values['client_id']], $actor);
-        $this->activity('Project "'.$data['name'].'" '.($project ? 'updated' : 'created').' with '.count($data['tasks']).' assigned task'.(count($data['tasks']) === 1 ? '' : 's'));
+        //  $this->activity('Project "'.$data['name'].'" '.($project ? 'updated' : 'created').' with '.count($data['tasks']).' assigned task'.(count($data['tasks']) === 1 ? '' : 's'));
+        $this->activity(
+            ($project ? 'updated' : 'created').' project "'.$data['name'].'" with '.count($data['tasks']).' assigned task'.(count($data['tasks']) === 1 ? '' : 's'),
+            $actor
+        );
+        return (array) DB::table('projects')
+            ->where('id', $id)
+            ->first();
     }
 
     public function deleteProject(string $id, object $actor): void
     {
-        $this->row('projects', $id);
+        $project = $this->row('projects', $id);
         foreach (DB::table('tasks')->where('project_id', $id)->pluck('id') as $taskId) $this->tasks->delete($taskId, $actor);
         DB::table('projects')->where('id', $id)->delete();
+        $this->activity('deleted project "'.$project->name.'" ('.$id.')', $actor);
     }
 
     private function linkProject(string $id, ?string $clientId, object $actor): void
@@ -88,7 +105,7 @@ class DashboardTaskOperations
         $this->changeTasks(DB::table('tasks')->where('project_id', $id), ['client_id' => $clientId], $actor);
     }
 
-    public function client(Request $request, object $actor, ?string $id): void
+    public function client(Request $request, object $actor, ?string $id): array
     {
         $client = $id ? $this->row('clients', $id) : null;
         $login = $id ? DB::table('users')->where('role', 'client')->where(fn ($q) => $q->where('client_id', $id)->orWhere('id', $id))->first() : null;
@@ -116,12 +133,17 @@ class DashboardTaskOperations
         $selected = $data['project_id'] ?? null;
         if ($oldProject && $oldProject->id !== $selected) $this->linkProject($oldProject->id, null, $actor);
         if ($selected) $this->linkProject($selected, $id, $actor);
-        $this->activity('Client '.$profile['company'].' '.($client ? 'updated' : 'added'));
+        // $this->activity('Client '.$profile['company'].' '.($client ? 'updated' : 'added'));
+        $this->activity(
+            ($client ? 'updated' : 'added').' client '.$profile['company'],
+            $actor
+        );
+        return ['id' => $id] + $profile;
     }
 
     public function deleteClient(string $id, object $actor): void
     {
-        $this->row('clients', $id);
+        $client = $this->row('clients', $id);
         foreach (DB::table('tasks')->where('client_id', $id)->pluck('id') as $taskId) $this->tasks->delete($taskId, $actor);
         foreach (DB::table('projects')->where('client_id', $id)->pluck('id') as $projectId) {
             // Preserve any historically inconsistent cross-client task, detaching its project explicitly.
@@ -134,6 +156,7 @@ class DashboardTaskOperations
             DB::table('users')->where('id', $userId)->delete();
         }
         DB::table('clients')->where('id', $id)->delete();
+        $this->activity('deleted client "'.$client->company.'" ('.$id.')', $actor);
     }
 
     private function removeOwner(string $id, object $actor): void
@@ -148,12 +171,14 @@ class DashboardTaskOperations
 
     public function deleteMember(string $id, object $actor): void
     {
-        abort_unless($this->row('users', $id)->role === 'team', 403, 'Only team members can be removed here.');
+        $member = $this->row('users', $id);
+        abort_unless($member->role === 'team', 403, 'Only team members can be removed here.');
         $this->removeOwner($id, $actor);
         DB::table('users')->where('id', $id)->delete();
+        $this->activity('deleted team member "'.$member->name.'" ('.$id.')', $actor);
     }
 
-    public function department(Request $request, object $actor, ?string $id): void
+    public function department(Request $request, object $actor, ?string $id): array
     {
         $department = $id ? $this->row('departments', $id) : null;
         $data = $request->validate(['name' => ['required', 'string', 'max:40', Rule::unique('departments', 'name')->ignore($id, 'id')],
@@ -162,7 +187,12 @@ class DashboardTaskOperations
             $this->changeTasks(DB::table('tasks')->where('department', $department->name), ['department' => $data['name']], $actor);
             DB::table('users')->where('department', $department->name)->update(['department' => $data['name'], 'updated_at' => now()]);
             DB::table('departments')->where('id', $id)->update($data + ['updated_at' => now()]);
-        } else DB::table('departments')->insert($data + ['id' => 'dept_'.Str::lower(Str::random(12)), 'created_at' => now(), 'updated_at' => now()]);
+        } else {
+            $id = 'dept_'.Str::lower(Str::random(12));
+            DB::table('departments')->insert($data + ['id' => $id, 'created_at' => now(), 'updated_at' => now()]);
+        }
+        $this->activity(($department ? 'updated' : 'created').' department "'.$data['name'].'" ('.$id.')', $actor);
+        return ['id' => $id] + $data;
     }
 
     public function deleteDepartment(string $id, object $actor): void
@@ -172,6 +202,7 @@ class DashboardTaskOperations
         $fallback = DB::table('departments')->where('id', '!=', $id)->orderBy('name')->value('name') ?? 'General';
         $this->changeTasks(DB::table('tasks')->where('department', $department->name), ['department' => $fallback], $actor);
         DB::table('departments')->where('id', $id)->delete();
+        $this->activity('deleted department "'.$department->name.'" ('.$id.'); tasks moved to "'.$fallback.'"', $actor);
     }
 
     public function brief(Request $request, object $actor): void
