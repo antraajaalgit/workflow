@@ -330,6 +330,24 @@ function viewProjects(){
     <div class="folder-grid">${cards||'<div class="empty"><div class="e-ic">📌</div>No projects yet</div>'}</div>`;
 }
 
+// Project grids keep their own display order without changing shared task state.
+function projectDueTime(value){
+  if(typeof value !== 'number' || !Number.isFinite(value) || value < 0 || Number.isNaN(new Date(value).getTime()))return Infinity;
+  return value;
+}
+function projectTasksByDueDate(tasks){
+  return [...tasks].sort((a,b)=>{
+    const first=projectDueTime(a.dueDate),second=projectDueTime(b.dueDate);
+    return first===second?0:first-second;
+  });
+}
+function sortProjectTaskRows(list){
+  const rows=$$('[data-project-task]',list).map(row=>({row,dueDate:$('[data-pt-due]',row).valueAsNumber}));
+  projectTasksByDueDate(rows).forEach(({row},index)=>{
+    list.appendChild(row);
+    $('.project-task-number',row).textContent=index+1;
+  });
+}
 function projectTaskRow(index, task=null){
   const members=assignableStaff();
   const departmentOptions=departments().map(d=>`<option value="${esc(d.name)}" ${task?.dept===d.name?'selected':''}>${esc(d.name)}</option>`).join('');
@@ -342,7 +360,7 @@ function projectTaskRow(index, task=null){
     </div>
     <div class="form-row">
       <div class="field"><label>Progress</label><select data-pt-progress>${taskProgressOptions(task?.progress)}</select></div>
-      <div class="field"><label>Due date</label><input data-pt-due type="date" value="${task?.dueDate?new Date(task.dueDate).toISOString().slice(0,10):''}"></div>
+      <div class="field"><label>Due date</label><input data-pt-due type="date" value="${projectDueTime(task?.dueDate)!==Infinity?new Date(task.dueDate).toISOString().slice(0,10):''}"></div>
     </div>
     <div class="field"><label>Department <span class="req">*</span></label><select data-pt-dept><option value="">Select department</option>${departmentOptions}</select></div>
     <div class="field"><label>Description</label><textarea data-pt-desc rows="2" placeholder="What needs to be done?">${esc(task?.desc||'')}</textarea></div>
@@ -376,7 +394,7 @@ function bindProjectTaskFiles(list){
 function openProjectForm(projectId=null){
   const formRevision=S()._revision;
   const project=projectById(projectId); const editing=!!project;
-  const projectTasks=editing?S().tasks.filter(t=>t.projectId===project.id):[];
+  const projectTasks=projectTasksByDueDate(editing?S().tasks.filter(t=>t.projectId===project.id):[]);
   const clientOpts=`<option value="" ${project?.clientId?'':'selected'}>No client</option>`+S().clients.map(c=>`<option value="${c.id}" ${c.id===project?.clientId?'selected':''}>${esc(c.company)}</option>`).join('');
   const modal=document.createElement('div'); modal.className='modal-scrim';
   modal.innerHTML=`<div class="modal project-modal"><div class="modal-head"><div><h2>${editing?'Edit project':'Create a new project'}</h2><p class="muted small">${editing?'Update project details, assignments, or add more tasks.':'Plan the work and assign ownership from the start.'}</p></div><button class="btn-ghost" data-close>✕</button></div>
@@ -392,7 +410,8 @@ function openProjectForm(projectId=null){
   const renumber=()=>$$('[data-project-task]',list).forEach((row,i)=>{$('.project-task-number',row).textContent=i+1;});
   const bindRemove=()=>$$('[data-remove-project-task]',list).forEach(b=>b.onclick=()=>{b.closest('[data-project-task]').remove();renumber();});
   bindRemove();bindProjectTaskFiles(list);
-  $('#add-project-task',modal).onclick=()=>{list.insertAdjacentHTML('beforeend',projectTaskRow($$('[data-project-task]',list).length));bindRemove();bindProjectTaskFiles(list);};
+  list.onchange=event=>{if(event.target.matches('[data-pt-due]'))sortProjectTaskRows(list);};
+  $('#add-project-task',modal).onclick=()=>{list.insertAdjacentHTML('beforeend',projectTaskRow($$('[data-project-task]',list).length));bindRemove();bindProjectTaskFiles(list);sortProjectTaskRows(list);};
   $('#save-project',modal).onclick=async()=>{
     const name=$('#project-name',modal).value.trim(); const rows=$$('[data-project-task]',list);
     if(!name){toast('Enter a project name');return;}
@@ -1100,7 +1119,7 @@ function openNewRecurring(taskId=null){
         <div class="field"><label>Repeats</label><select id="rc-freq"><option value="daily" ${task?.recurring==='daily'?'selected':''}>Daily</option><option value="alternate_days" ${task?.recurring==='alternate_days'?'selected':''}>Alternate Days</option><option value="weekly" ${!task||task.recurring==='weekly'?'selected':''}>Weekly</option><option value="monthly" ${task?.recurring==='monthly'?'selected':''}>Monthly</option></select></div>
       </div>
       <div class="form-row">
-        <div class="field"><label>Due date</label><input id="rc-due" type="date" value="${task?.dueDate?new Date(task.dueDate).toISOString().slice(0,10):''}"></div>
+        <div class="field"><label>Due date</label><input id="rc-due" type="date" value="${projectDueTime(task?.dueDate)!==Infinity?new Date(task.dueDate).toISOString().slice(0,10):''}"></div>
         <div class="field"><label>Progress</label><select id="rc-progress">${taskProgressOptions(task?.progress)}</select></div>
       </div>
     </div>

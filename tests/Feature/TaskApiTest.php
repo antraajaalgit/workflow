@@ -18,6 +18,7 @@ class TaskApiTest extends TestCase
     use CompoundTaskAssertions;
     use CompletedTaskCleanupAssertions;
     use McpToolAssertions;
+    use TaskReviewAssertions;
     private ?IsolatedDatabase $testDatabase = null;
 
     protected function setUp(): void

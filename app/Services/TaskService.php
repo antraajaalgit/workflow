@@ -114,6 +114,7 @@ class TaskService
 
             $after = $this->find($id);
             app(TaskEffects::class)->record($task, $after, $actor);
+            app(TaskEffects::class)->reviewNotification($task, $after);
 
             return ['task' => $after, 'assignments' => app(TaskEffects::class)->assignments($task, $after)];
         });

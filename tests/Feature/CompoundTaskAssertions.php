@@ -69,7 +69,8 @@ trait CompoundTaskAssertions
         $edited = $this->grid(['tasks' => [['id' => $task, 'title' => 'Edited', 'status' => 'review', 'progress' => '75', 'owner_ids' => ['two']]]]);
         $this->patchJson('/api/projects/'.$id.'/tasks', $edited)->assertOk();
         $this->assertDatabaseHas('tasks', ['id' => $task, 'title' => 'Edited', 'status' => 'review', 'progress' => '75', 'owner_id' => 'two']);
-        Mail::assertNothingSent();
+        Mail::assertNotSent(TaskAssignment::class);
+        Mail::assertSent(\App\Mail\TaskReadyForReview::class, 1);
         $this->patchJson('/api/projects/'.$id.'/tasks', $this->grid(['delete_ids' => [$task]]))->assertOk();
         $this->assertDatabaseMissing('tasks', ['id' => $task]);
         $this->assertDatabaseCount('tasks', 1);

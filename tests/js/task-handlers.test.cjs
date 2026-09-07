@@ -30,6 +30,7 @@ for(const file of ['assets/js/app.js','public/assets/js/app.js']) {
      projectTaskRow:()=>'',bindProjectTaskFiles(){},passwordField:()=>'',bindPasswordTools(){},esc:v=>v||'',taskProgressOptions:()=>'',departments:()=>[{name:'General'}],andonLevel:()=>'',ACTIVE:['todo'],fmtElapsed:()=>'',renderTaskAttachments:()=>'',renderChat:()=>'',composerHTML:()=>'',bindComposer(){},COLS:[{id:'todo',label:'To Do'}],avatar:()=>'',
      logActivity:()=>{throw Error('Unexpected task activity full-state save');},Notify:{both:()=>{throw Error('Unexpected notification write');}}});
    vm.runInContext(helpers,ctx);
+   vm.runInContext(section('function projectDueTime','function projectTaskRow'),ctx);
    return {ctx,calls,toasts,state,elements,element,store};
  }
  test(`${file}: standalone task handlers contain no legacy task saves or duplicate effects`,()=>{

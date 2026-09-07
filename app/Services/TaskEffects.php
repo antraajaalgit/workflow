@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Mail\TaskAssignment;
+use App\Mail\TaskReadyForReview;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -10,6 +11,39 @@ use Illuminate\Support\Str;
 
 class TaskEffects
 {
+    /** Capture the transition and recipients under the task lock; never mail a rolled-back update. */
+    public function reviewNotification(array $before, array $after): void
+    {
+        if ($before['status'] === 'review' || $after['status'] !== 'review') {
+            return;
+        }
+
+        $admins = DB::table('users')->where('role', 'admin')->where('role_id', 1)
+            // Reserved current-owner placeholder, not an individual admin account.
+            ->where('id', '!=', 'u_admin')->get(['name', 'email'])
+            ->filter(fn ($admin) => filter_var($admin->email, FILTER_VALIDATE_EMAIL) !== false);
+        if ($admins->isEmpty()) {
+            return;
+        }
+
+        $project = $after['project_id'] ? DB::table('projects')->where('id', $after['project_id'])->first() : null;
+        $client = $after['client_id'] ? DB::table('clients')->where('id', $after['client_id'])->first() : null;
+        $assignees = DB::table('users')->whereIn('id', $this->owners($after))->orderBy('name')->pluck('name')->all();
+
+        DB::afterCommit(function () use ($after, $admins, $project, $client, $assignees) {
+            foreach ($admins as $admin) {
+                try {
+                    Mail::mailer('chat_smtp')->to($admin->email, $admin->name)
+                        ->send(new TaskReadyForReview($after, $project?->name, $client?->name, $assignees));
+                } catch (\Throwable $exception) {
+                    Log::warning('Karya task review email could not be sent.', [
+                        'task_id' => $after['id'], 'recipient' => $admin->email, 'error' => $exception->getMessage(),
+                    ]);
+                }
+            }
+        });
+    }
+
     public function owners(array $task): array
     {
         $ids = $task['owner_ids'] ?? $task['ownerIds'] ?? null;
