@@ -255,7 +255,7 @@ function viewDashboard(){
         <span>${avatar(u,'')} ${esc(u.name)} <span class="muted small">· ${u.dept}</span></span>
         <b>${activeLoad(u.id)}</b>
       </div>
-      <div class="bar"><i style="width:${activeLoad(u.id)/maxLoad*100}%;background:${activeLoad(u.id)>=4?'var(--red)':'var(--accent2)'}"></i></div>
+      <div class="bar"><i style="width:${activeLoad(u.id)/maxLoad*100}%;background:${activeLoad(u.id)>=16?'var(--red)':activeLoad(u.id)>=8?'#f97316':'var(--green)'}"></i></div>
     </div>`).join('');
   const progressRows = team.map(u=>{
     const memberTasks=S().tasks.filter(t=>isTaskOwner(t,u.id));
