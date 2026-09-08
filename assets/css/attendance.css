@@ -1,0 +1,19 @@
+.attendance-card{margin-bottom:22px}
+.attendance-card .section-head{gap:12px;align-items:flex-start}
+.attendance-status{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:16px 0}
+.attendance-details{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;padding:16px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.attendance-details dt{color:var(--muted);font-size:12px;margin-bottom:5px}
+.attendance-details dd{font-weight:600;font-variant-numeric:tabular-nums}
+.attendance-actions{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-top:12px}
+.attendance-message{margin-top:12px}
+.attendance-error{color:#a92e25;background:rgba(217,74,61,.08);border-radius:9px;padding:10px 12px;margin-top:12px;font-size:13px}
+.attendance-feedback:not(:empty){margin-top:12px}
+.admin-attendance-filters{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin:16px 0}
+.admin-attendance-filters label,.admin-overtime-note{display:flex;flex-direction:column;gap:6px;font-size:13px}
+.admin-attendance-filters input,.admin-attendance-filters select,.admin-overtime-note input{padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink)}
+.admin-overtime-note{max-width:540px;margin-bottom:12px}
+.admin-attendance-table{overflow-x:auto;margin-top:16px}
+.admin-attendance-table table{width:100%;border-collapse:collapse;font-size:13px}
+.admin-attendance-table th,.admin-attendance-table td{text-align:left;padding:12px;border-bottom:1px solid var(--line);vertical-align:top;min-width:90px}
+.admin-attendance-table caption{text-align:left;padding:8px 0}
+@media(max-width:540px){.attendance-details{grid-template-columns:1fr;gap:12px}.attendance-actions .btn{width:100%}}

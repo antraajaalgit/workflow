@@ -4,9 +4,17 @@ use App\Http\Controllers\StateController;
 use App\Http\Controllers\TaskController;
 use App\Http\Controllers\DashboardTaskController;
 use App\Http\Controllers\GoogleCalendarController;
+use App\Http\Controllers\AttendanceController;
+use App\Http\Controllers\AdminAttendanceController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('api')->group(function () {
+    Route::get('/admin/attendance', [AdminAttendanceController::class, 'index']);
+    Route::post('/admin/attendance/overrides', [AdminAttendanceController::class, 'store']);
+    Route::delete('/admin/attendance/overrides/{id}', [AdminAttendanceController::class, 'destroy']);
+    Route::get('/attendance/today', [AttendanceController::class, 'today']);
+    Route::post('/attendance/check-in', [AttendanceController::class, 'checkIn']);
+    Route::post('/attendance/check-out', [AttendanceController::class, 'checkOut']);
     Route::post('/projects', [DashboardTaskController::class, 'project']);
     Route::patch('/projects/{id}/tasks', [DashboardTaskController::class, 'project']);
     Route::delete('/projects/{id}', [DashboardTaskController::class, 'deleteProject']);

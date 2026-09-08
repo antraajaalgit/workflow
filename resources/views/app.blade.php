@@ -7,6 +7,7 @@
   <title>Karya — Agency Flow OS</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}?v=23" />
+  <link rel="stylesheet" href="{{ asset('assets/css/attendance.css') }}?v=2" />
 </head>
 <body>
   <div id="login" class="login">
@@ -38,6 +39,8 @@
   <div id="scrim" class="scrim hidden"></div>
   <div id="modal-host"></div>
   <script src="{{ asset('assets/js/store.js') }}?v=17"></script>
-  <script src="{{ asset('assets/js/app.js') }}?v=56"></script>
+  <script src="{{ asset('assets/js/attendance.js') }}?v=1"></script>
+  <script src="{{ asset('assets/js/admin-attendance.js') }}?v=1"></script>
+  <script src="{{ asset('assets/js/app.js') }}?v=58"></script>
 </body>
 </html>

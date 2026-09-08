@@ -4,6 +4,8 @@ const $ = (s, r=document) => r.querySelector(s);
 const $$ = (s, r=document) => [...r.querySelectorAll(s)];
 
 let session = null;   // current signed-in user
+let employeeAttendance = null;
+let adminAttendance = null;
 let route = 'dashboard';
 let routeParam = null;
 let tasksPage = 1;
@@ -184,6 +186,8 @@ async function signIn(email, password){
   buildNav(); renderWho(); updateBell(); render(); openRequestedTask();
 }
 async function signOut(){
+  employeeAttendance?.reset();
+  adminAttendance?.reset();
   await Store.signOut();
   toggleDrawer(false);
   session = null;
@@ -209,6 +213,7 @@ const NAV = {
     {id:'inbox', ic:'💬', label:'Inbox'},
     {id:'recurring', ic:'🔁', label:'Recurring Tasks'},
     {id:'tasks', ic:'✅', label:'Tasks'},
+    {id:'admin-attendance', ic:'📅', label:'Attendance'},
     {sep:'Manage'},
     {id:'departments', ic:'🏢', label:'Departments'},
     {id:'team', ic:'👥', label:'Team & Load'},
@@ -243,13 +248,14 @@ function go(r, param=null){ route=r; routeParam=param; buildNav(); render(); }
 /* ============================================================
    RENDER ROUTER
 ============================================================ */
-const TITLES = {dashboard:'Dashboard', projects:'Projects', andon:'Andon Board', kanban:'Kanban Flow', clients:'Client Folders', inbox:'Inbox', recurring:'Recurring Tasks', tasks:'Tasks', departments:'Departments', team:'Team & Workload', settings:'Settings', 'my-requests':'My Requests', 'new-request':'New Request', messages:'Messages', 'client-folder':'Client Folder'};
+const TITLES = {'admin-attendance':'Team Attendance',dashboard:'Dashboard', projects:'Projects', andon:'Andon Board', kanban:'Kanban Flow', clients:'Client Folders', inbox:'Inbox', recurring:'Recurring Tasks', tasks:'Tasks', departments:'Departments', team:'Team & Workload', settings:'Settings', 'my-requests':'My Requests', 'new-request':'New Request', messages:'Messages', 'client-folder':'Client Folder'};
 function render(){
   const pageTitle = $('#page-title');
   const v = $('#view');
   if (!pageTitle || !v || !session || !S()) return;
   pageTitle.textContent = TITLES[route] || '';
   const R = {
+    'admin-attendance': () => session.role === 'admin' ? '<section id="admin-attendance" class="card"></section>' : '<p>Admin access required.</p>',
     dashboard: viewDashboard, projects: viewProjects, andon: viewAndon, kanban: viewKanban,
     clients: viewClients, 'client-folder': viewClientFolder, inbox: viewInbox,
     recurring: viewRecurring, tasks: viewTasks, departments: viewDepartments, team: viewTeam, settings: viewSettings,
@@ -257,6 +263,14 @@ function render(){
   };
   v.innerHTML = (R[route] || viewDashboard)();
   bindView();
+  if (route === 'dashboard' && session.role === 'team') {
+    employeeAttendance ||= AttendanceCard.create({request: (...args) => Store.taskJson(...args), getUser: () => session});
+    employeeAttendance.mount(document.querySelector('#employee-attendance'));
+  } else employeeAttendance?.unmount();
+  if (route === 'admin-attendance' && session.role === 'admin') {
+    adminAttendance ||= AdminAttendance.create({request: (...args) => Store.taskJson(...args), getUser: () => session});
+    adminAttendance.mount(document.querySelector('#admin-attendance'));
+  } else adminAttendance?.unmount();
 }
 
 /* ---------- DASHBOARD ---------- */
@@ -313,6 +327,7 @@ function viewDashboard(){
 
   return `
     ${session.role==='admin'?'<div class="section-head"><div></div><button class="btn" data-add-project>+ Add project</button></div>':session.role==='team'?'<div class="section-head"><div><h2>My work</h2><p class="muted small">Create and manage tasks assigned to you.</p></div><button class="btn" data-add-team-task>+ Add task</button></div>':''}
+    ${session.role==='team'?`<section id="employee-attendance" class="card attendance-card" aria-labelledby="attendance-heading"></section>`:''}
     <div class="grid cols-4" style="margin-bottom:22px">
       ${kpi(active.length, 'Active tasks')}
       ${kpi(red.length, 'Stuck (red) 🔴', red.length?'Needs attention':'All clear', red.length?'var(--red)':'var(--green)')}
