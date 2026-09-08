@@ -107,8 +107,30 @@ const Notify = {
     if (email) this.fire('email', email, emailText || waText);
   }
 };
+const notificationReads = new Map();
+function readNotificationIds(){
+  if (!session) return new Set();
+  if (!notificationReads.has(session.id)) {
+    let ids = [];
+    try {
+      const saved = JSON.parse(localStorage.getItem(`karya:notification-reads:${session.id}`) || '[]');
+      if (Array.isArray(saved)) ids = saved.filter(id => typeof id === 'string');
+    } catch (_) { /* Keep read tracking available when browser storage is unavailable. */ }
+    notificationReads.set(session.id, new Set(ids));
+  }
+  return notificationReads.get(session.id);
+}
+function markNotificationsRead(){
+  if (!session) return;
+  const ids = readNotificationIds();
+  S().notifications.forEach(notification => ids.add(notification.id));
+  try { localStorage.setItem(`karya:notification-reads:${session.id}`, JSON.stringify([...ids])); }
+  catch (_) { /* The in-memory read state still lasts for this page session. */ }
+}
 function updateBell(){
-  const n = S().notifications.length;
+  if (session && !$('#notif-drawer').classList.contains('hidden')) renderNotifs();
+  const readIds = readNotificationIds();
+  const n = session ? S().notifications.filter(notification => !readIds.has(notification.id)).length : 0;
   const b = $('#bell-count');
   if (b){ b.textContent = n; b.classList.toggle('hidden', n===0); }
 }
@@ -147,6 +169,7 @@ async function signIn(email, password){
 }
 async function signOut(){
   await Store.signOut();
+  toggleDrawer(false);
   session = null;
   $('#app').classList.add('hidden');
   $('#login').classList.remove('hidden');
@@ -1342,7 +1365,7 @@ $('#scrim').onclick=()=>toggleDrawer(false);
 function toggleDrawer(open){
   $('#notif-drawer').classList.toggle('hidden',!open);
   $('#scrim').classList.toggle('hidden',!open);
-  if(open) renderNotifs();
+  updateBell();
 }
 function renderNotifs(){
   $('#notif-list').innerHTML = S().notifications.length ? S().notifications.map(n=>`
@@ -1351,6 +1374,7 @@ function renderNotifs(){
       <div class="n-body">${esc(n.text)}</div>
       <div class="n-to">→ ${esc(n.to)}</div>
     </div>`).join('') : '<div class="empty"><div class="e-ic">🔕</div>No messages sent yet</div>';
+  markNotificationsRead();
 }
 
 /* ---------- boot ---------- */
