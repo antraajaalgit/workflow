@@ -45,6 +45,51 @@ class LeaveService
             'paid_remaining' => max(0, $entitlement - $used), 'unpaid_used' => (int) ($counts['unpaid'] ?? 0)];
     }
 
+
+public function mine(string $actorId): array
+{
+    $this->access->employee($actorId);
+
+    return DB::table('leave_requests')
+        ->where('user_id', $actorId)
+        ->orderByDesc('created_at')
+        ->get()
+        ->map(fn ($request) => (array) $request)
+        ->all();
+}
+
+public function adminListing(string $actorId, ?string $status = null): array
+{
+    $this->access->admin($actorId);
+
+    if ($status !== null && ! in_array($status, ['pending', 'approved', 'rejected'], true)) {
+        throw ValidationException::withMessages([
+            'status' => 'Invalid leave request status.',
+        ]);
+    }
+
+    $query = DB::table('leave_requests as leave')
+        ->join('users', 'users.id', '=', 'leave.user_id')
+        ->select([
+            'leave.*',
+            'users.name as user_name',
+            'users.email as user_email',
+        ])
+        ->orderByDesc('leave.created_at');
+
+    if ($status !== null) {
+        $query->where('leave.status', $status);
+    }
+
+    return $query
+        ->get()
+        ->map(fn ($request) => (array) $request)
+        ->all();
+}
+
+
+
+
     public function approve(string $actorId, string $id, ?string $note = null): object
     {
         return $this->review($actorId, $id, $note, true);

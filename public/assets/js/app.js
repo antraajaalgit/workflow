@@ -5,7 +5,9 @@ const $$ = (s, r=document) => [...r.querySelectorAll(s)];
 
 let session = null;   // current signed-in user
 let employeeAttendance = null;
+let employeeLeave = null;
 let adminAttendance = null;
+let adminLeave = null;
 let route = 'dashboard';
 let routeParam = null;
 let tasksPage = 1;
@@ -187,7 +189,9 @@ async function signIn(email, password){
 }
 async function signOut(){
   employeeAttendance?.reset();
+  employeeLeave?.reset();
   adminAttendance?.reset();
+  adminLeave?.reset();
   await Store.signOut();
   toggleDrawer(false);
   session = null;
@@ -214,6 +218,7 @@ const NAV = {
     {id:'recurring', ic:'🔁', label:'Recurring Tasks'},
     {id:'tasks', ic:'✅', label:'Tasks'},
     {id:'admin-attendance', ic:'📅', label:'Attendance'},
+    {id:'admin-leave', ic:'🏖️', label:'Leave Requests'},
     {sep:'Manage'},
     {id:'departments', ic:'🏢', label:'Departments'},
     {id:'team', ic:'👥', label:'Team & Load'},
@@ -248,7 +253,7 @@ function go(r, param=null){ route=r; routeParam=param; buildNav(); render(); }
 /* ============================================================
    RENDER ROUTER
 ============================================================ */
-const TITLES = {'admin-attendance':'Team Attendance',dashboard:'Dashboard', projects:'Projects', andon:'Andon Board', kanban:'Kanban Flow', clients:'Client Folders', inbox:'Inbox', recurring:'Recurring Tasks', tasks:'Tasks', departments:'Departments', team:'Team & Workload', settings:'Settings', 'my-requests':'My Requests', 'new-request':'New Request', messages:'Messages', 'client-folder':'Client Folder'};
+const TITLES = {'admin-attendance':'Team Attendance','admin-leave':'Leave Requests',dashboard:'Dashboard', projects:'Projects', andon:'Andon Board', kanban:'Kanban Flow', clients:'Client Folders', inbox:'Inbox', recurring:'Recurring Tasks', tasks:'Tasks', departments:'Departments', team:'Team & Workload', settings:'Settings', 'my-requests':'My Requests', 'new-request':'New Request', messages:'Messages', 'client-folder':'Client Folder'};
 function render(){
   const pageTitle = $('#page-title');
   const v = $('#view');
@@ -260,6 +265,10 @@ function render(){
     clients: viewClients, 'client-folder': viewClientFolder, inbox: viewInbox,
     recurring: viewRecurring, tasks: viewTasks, departments: viewDepartments, team: viewTeam, settings: viewSettings,
     'my-requests': viewMyRequests, 'new-request': viewNewRequest, messages: viewMessages,
+    'admin-leave': () =>
+  session.role === 'admin'
+    ? '<section id="admin-leave" class="card"></section>'
+    : '<p>Admin access required.</p>',
   };
   v.innerHTML = (R[route] || viewDashboard)();
   bindView();
@@ -267,10 +276,29 @@ function render(){
     employeeAttendance ||= AttendanceCard.create({request: (...args) => Store.taskJson(...args), getUser: () => session});
     employeeAttendance.mount(document.querySelector('#employee-attendance'));
   } else employeeAttendance?.unmount();
+  if (route === 'dashboard' && session.role === 'team') {
+  employeeLeave ||= LeaveCard.create({
+    request: (...args) => Store.taskJson(...args),
+    getUser: () => session
+  });
+  employeeLeave.mount(document.querySelector('#employee-leave'));
+} else employeeLeave?.unmount();
   if (route === 'admin-attendance' && session.role === 'admin') {
     adminAttendance ||= AdminAttendance.create({request: (...args) => Store.taskJson(...args), getUser: () => session});
     adminAttendance.mount(document.querySelector('#admin-attendance'));
   } else adminAttendance?.unmount();
+  if (route === 'admin-leave' && session.role === 'admin') {
+  adminLeave ||= AdminLeave.create({
+    request: (...args) => Store.taskJson(...args),
+    getUser: () => session
+  });
+
+  adminLeave.mount(
+    document.querySelector('#admin-leave')
+  );
+} else {
+  adminLeave?.unmount();
+}
 }
 
 /* ---------- DASHBOARD ---------- */
@@ -328,6 +356,7 @@ function viewDashboard(){
   return `
     ${session.role==='admin'?'<div class="section-head"><div></div><button class="btn" data-add-project>+ Add project</button></div>':session.role==='team'?'<div class="section-head"><div><h2>My work</h2><p class="muted small">Create and manage tasks assigned to you.</p></div><button class="btn" data-add-team-task>+ Add task</button></div>':''}
     ${session.role==='team'?`<section id="employee-attendance" class="card attendance-card" aria-labelledby="attendance-heading"></section>`:''}
+    ${session.role==='team'?`<section id="employee-leave" class="card" style="margin-top:16px"></section>`:''}
     <div class="grid cols-4" style="margin-bottom:22px">
       ${kpi(active.length, 'Active tasks')}
       ${kpi(red.length, 'Stuck (red) 🔴', red.length?'Needs attention':'All clear', red.length?'var(--red)':'var(--green)')}

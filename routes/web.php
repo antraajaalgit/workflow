@@ -7,6 +7,8 @@ use App\Http\Controllers\GoogleCalendarController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\AdminAttendanceController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\LeaveController;
+use App\Http\Controllers\AdminLeaveController;
 
 Route::prefix('api')->group(function () {
     Route::get('/admin/attendance', [AdminAttendanceController::class, 'index']);
@@ -15,6 +17,15 @@ Route::prefix('api')->group(function () {
     Route::get('/attendance/today', [AttendanceController::class, 'today']);
     Route::post('/attendance/check-in', [AttendanceController::class, 'checkIn']);
     Route::post('/attendance/check-out', [AttendanceController::class, 'checkOut']);
+
+    Route::get('/leave/mine', [LeaveController::class, 'mine']);
+    Route::get('/leave/balance', [LeaveController::class, 'balance']);
+   Route::post('/leave', [LeaveController::class, 'store']);
+   Route::get('/admin/leave', [AdminLeaveController::class, 'index']);
+Route::post('/admin/leave/{id}/approve', [AdminLeaveController::class, 'approve']);
+Route::post('/admin/leave/{id}/reject', [AdminLeaveController::class, 'reject']);
+
+
     Route::post('/projects', [DashboardTaskController::class, 'project']);
     Route::patch('/projects/{id}/tasks', [DashboardTaskController::class, 'project']);
     Route::delete('/projects/{id}', [DashboardTaskController::class, 'deleteProject']);
