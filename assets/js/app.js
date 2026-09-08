@@ -164,13 +164,29 @@ function renderLogin(){
   }).join('');
   $$('.user-pick').forEach(b => b.onclick = () => signIn(b.dataset.id));
 }
+// Email deep links only open the existing modal after authenticated state is loaded.
+function openRequestedTask(){
+  if (!session) return;
+  const ids = new URLSearchParams(window.location.search).getAll('task');
+  if (!ids.length) return;
+  if (ids.length !== 1 || !/^[A-Za-z0-9_-]{1,40}$/.test(ids[0])) {
+    toast('This task link is invalid.');
+    return;
+  }
+  if (!S().tasks.some(task => task.id === ids[0])) {
+    toast('This task is no longer available.');
+    return;
+  }
+  openTask(ids[0]);
+}
+
 async function signIn(id){
   await Store.signIn(id);
   session = userById(id);
   $('#login').classList.add('hidden');
   $('#app').classList.remove('hidden');
   route = session.role==='client' ? 'my-requests' : 'dashboard';
-  buildNav(); renderWho(); updateBell(); render();
+  buildNav(); renderWho(); updateBell(); render(); openRequestedTask();
 }
 async function signOut(){
   await Store.signOut();

@@ -22,4 +22,4 @@ Description:
 {!! $task['description'] !!}
 
 @endif
-Open Karya to review the task: {!! url('/') !!}
+Review Task: {!! $taskUrl !!}

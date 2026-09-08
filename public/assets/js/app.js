@@ -157,6 +157,22 @@ function activeLoad(uid){ return S().tasks.filter(t=>isTaskOwner(t,uid) && ACTIV
 /* ============================================================
    AUTH
 ============================================================ */
+// Email deep links only open the existing modal after authenticated state is loaded.
+function openRequestedTask(){
+  if (!session) return;
+  const ids = new URLSearchParams(window.location.search).getAll('task');
+  if (!ids.length) return;
+  if (ids.length !== 1 || !/^[A-Za-z0-9_-]{1,40}$/.test(ids[0])) {
+    toast('This task link is invalid.');
+    return;
+  }
+  if (!S().tasks.some(task => task.id === ids[0])) {
+    toast('This task is no longer available.');
+    return;
+  }
+  openTask(ids[0]);
+}
+
 async function signIn(email, password){
   const submit=$('#login-submit'), error=$('#login-error');
   submit.disabled=true;submit.textContent='Signing in…';error.classList.add('hidden');
@@ -165,7 +181,7 @@ async function signIn(email, password){
   $('#login').classList.add('hidden');
   $('#app').classList.remove('hidden');
   route = session.role==='client' ? 'my-requests' : 'dashboard';
-  buildNav(); renderWho(); updateBell(); render();
+  buildNav(); renderWho(); updateBell(); render(); openRequestedTask();
 }
 async function signOut(){
   await Store.signOut();
@@ -1381,7 +1397,7 @@ function renderNotifs(){
 (async function boot(){
   try {
     const saved=await Store.currentSession();
-    if(saved.userId){try{await Store.generateRecurringTasks();}catch(_){}await Store.load();session=userById(saved.userId);$('#login').classList.add('hidden');$('#app').classList.remove('hidden');route=session.role==='client'?'my-requests':'dashboard';buildNav();renderWho();updateBell();render();}
+    if(saved.userId){try{await Store.generateRecurringTasks();}catch(_){}await Store.load();session=userById(saved.userId);$('#login').classList.add('hidden');$('#app').classList.remove('hidden');route=session.role==='client'?'my-requests':'dashboard';buildNav();renderWho();updateBell();render();openRequestedTask();}
   } catch (error) {
     session = null;
     document.body.innerHTML = `<div style="padding:40px;font-family:sans-serif"><h2>Karya could not connect to the server</h2><p>${esc(error.message)}</p></div>`;

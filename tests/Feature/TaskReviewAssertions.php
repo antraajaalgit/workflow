@@ -20,6 +20,7 @@ trait TaskReviewAssertions
             'todo enters review' => ['todo', 'review', 1],
             'in progress enters review' => ['in_progress', 'review', 1],
             'blocked enters review' => ['blocked', 'review', 1],
+            'done enters review' => ['done', 'review', 1],
             'new enters review' => ['new', 'review', 1],
             'review remains review' => ['review', 'review', 0],
             'review becomes done' => ['review', 'done', 0],
@@ -60,7 +61,7 @@ trait TaskReviewAssertions
         $this->patchJson('/api/tasks/'.$id, ['title' => 'Edited', 'description' => 'New description'])->assertOk();
         $this->patchJson('/api/tasks/'.$id.'/progress', ['progress' => '75'])->assertOk()->assertJsonPath('status', 'review');
         Mail::assertSent(TaskReadyForReview::class, 1);
-        $this->patchJson('/api/tasks/'.$id.'/status', ['status' => 'todo'])->assertOk();
+        $this->patchJson('/api/tasks/'.$id.'/status', ['status' => 'done'])->assertOk();
         $this->patchJson('/api/tasks/'.$id.'/status', ['status' => 'review'])->assertOk();
         Mail::assertSent(TaskReadyForReview::class, 2);
     }
@@ -120,5 +121,29 @@ trait TaskReviewAssertions
         foreach (['Design & copy', 'Please check the layout.', 'Review Project', 'Client', 'one, two', 'Current status: Review', 'Priority: High', '07 Sep 2026', $id] as $text) {
             $mail->assertSeeInText($text);
         }
+    }
+
+    public function test_review_link_uses_configured_url_and_only_opens_the_app(): void
+    {
+        config(['app.url' => 'https://configured.example.test/karya/']);
+        $id = $this->task();
+        $this->patchJson('/api/tasks/'.$id.'/status', ['status' => 'review'])->assertOk();
+        $mail = Mail::sent(TaskReadyForReview::class)->first();
+        $url = 'https://configured.example.test/karya/?task='.$id;
+        $mail->assertSeeInHtml('href="'.$url.'"', false);
+        $mail->assertSeeInHtml('Review Task');
+        $mail->assertSeeInText($url);
+
+        $this->withSession(['nagare_user_id' => null])->get('/?task='.$id)->assertOk();
+        $this->getJson('/api/tasks/'.$id)->assertUnauthorized();
+        $this->assertDatabaseHas('tasks', ['id' => $id, 'status' => 'review']);
+        $this->withSession(['nagare_user_id' => 'admin'])->get('/?task='.$id)->assertOk();
+        $this->getJson('/api/tasks/'.$id)->assertOk()->assertJsonPath('id', $id)->assertJsonPath('status', 'review');
+        $this->assertDatabaseHas('tasks', ['id' => $id, 'status' => 'review']);
+        Mail::assertSent(TaskReadyForReview::class, 1);
+        $this->patchJson('/api/tasks/'.$id.'/status', ['status' => 'done'])->assertOk();
+        Mail::assertSent(TaskReadyForReview::class, 1);
+        $this->get('/?task=missing')->assertOk();
+        $this->getJson('/api/tasks/missing')->assertNotFound();
     }
 }
