@@ -30,12 +30,25 @@ use App\Mcp\Tools\DeleteDepartmentTool;
 use App\Mcp\Tools\DeleteTeamMemberTool;
 use App\Mcp\Tools\CreateProjectTool;
 
+use App\Mcp\Tools\ListAttendanceTool;
+use App\Mcp\Tools\AuthorizeOvertimeTool;
+use App\Mcp\Tools\RevokeOvertimeTool;
+use App\Mcp\Tools\ListLeaveRequestsTool;
+use App\Mcp\Tools\ReviewLeaveRequestTool;
+use App\Mcp\Tools\GetLeaveBalanceTool;
+
 #[Name('Karya Server')]
 #[Version('0.0.1')]
-#[Instructions('Manage Karya as the Passport-authenticated allowed admin. Resolve entity IDs with list tools before writes. Use dedicated task status, progress and assignment tools. Project task edits are atomic. Delete tools perform dashboard cleanup. Never reveal credentials. Team member creation and editing remain dashboard-only.')]
+#[Instructions('Manage Karya as the Passport-authenticated allowed admin. Resolve entity IDs with list tools before writes. Use dedicated task status, progress and assignment tools. Project task edits are atomic. Delete tools perform dashboard cleanup. Never reveal credentials. Team member creation and editing remain dashboard-only. Attendance and leave tools are admin-only; use exact employee_name (case-insensitive), never guess ambiguous names. List attendance for override IDs and leave requests for review IDs. Employee check-in and check-out remain browser/geofence-only and are not exposed through MCP.')]
 class KaryaServer extends Server
 {
     protected array $tools = [
+        ListAttendanceTool::class,
+        AuthorizeOvertimeTool::class,
+        RevokeOvertimeTool::class,
+        ListLeaveRequestsTool::class,
+        ReviewLeaveRequestTool::class,
+        GetLeaveBalanceTool::class,
         ListProjectsTool::class,
         ListTasksTool::class,
         ListTeamMembersTool::class,

@@ -81,6 +81,37 @@ function andonLevel(t){
   if (m >= amberMin) return 'amber';
   return 'green';
 }
+// Read state is per user and task stage, allowing later stages to alert again.
+const andonReads = new Map();
+const andonAlertKey = t => JSON.stringify([t.id, t.status, t.stageAt]);
+function andonScope(){
+  return session.role==='team' ? S().tasks.filter(t=>t.ownerId===session.id) : S().tasks;
+}
+function readAndonAlerts(){
+  if (!session) return new Set();
+  if (!andonReads.has(session.id)) {
+    let keys = [];
+    try {
+      const saved = JSON.parse(localStorage.getItem('karya:andon-reads:'+session.id) || '[]');
+      if (Array.isArray(saved)) keys = saved.filter(key => typeof key === 'string');
+    } catch (_) { /* Keep tracking available when browser storage is unavailable. */ }
+    andonReads.set(session.id, new Set(keys));
+  }
+  return andonReads.get(session.id);
+}
+function markAndonAlertsRead(){
+  if (!session) return;
+  const keys = readAndonAlerts();
+  andonScope().filter(t=>andonLevel(t)==='red').forEach(t=>keys.add(andonAlertKey(t)));
+  try { localStorage.setItem('karya:andon-reads:'+session.id, JSON.stringify([...keys])); }
+  catch (_) { /* Read state remains available for this page session. */ }
+}
+function unreadAndonCount(){
+  if (!session) return 0;
+  const keys = readAndonAlerts();
+  return andonScope().filter(t=>andonLevel(t)==='red' && !keys.has(andonAlertKey(t))).length;
+}
+
 function fmtElapsed(t){
   const s = Math.floor(elapsedMs(t)/1000);
   const m = Math.floor(s/60), sec = s%60;
@@ -247,7 +278,7 @@ function buildNav(){
   $('#nav').innerHTML = items.map(it => {
     if (it.sep) return `<div class="nav-sep">${it.sep}</div>`;
     let badge = '';
-    if (it.id==='andon'){ const r = S().tasks.filter(t=>andonLevel(t)==='red').length; if (r) badge=`<span class="badge">${r}</span>`; }
+    if (it.id==='andon'){ const r = unreadAndonCount(); if (r) badge=`<span class="badge">${r}</span>`; }
     return `<a data-route="${it.id}" class="${route===it.id?'active':''}"><span class="ic">${it.ic}</span>${it.label}${badge}</a>`;
   }).join('');
   $$('#nav a').forEach(a => a.onclick = () => go(a.dataset.route));
@@ -275,6 +306,7 @@ function render(){
     : '<p>Admin access required.</p>',
   };
   v.innerHTML = (R[route] || viewDashboard)();
+  if (route==='andon') { markAndonAlertsRead(); buildNav(); }
   bindView();
   if (route === 'dashboard' && session.role === 'team') {
     employeeAttendance ||= AttendanceCard.create({request: (...args) => Store.taskJson(...args), getUser: () => session});
@@ -307,7 +339,7 @@ function render(){
 
 /* ---------- DASHBOARD ---------- */
 function viewDashboard(){
-  const scope = session.role==='team' ? S().tasks.filter(t=>t.ownerId===session.id) : S().tasks;
+  const scope = andonScope();
   const active = scope.filter(t=>ACTIVE.includes(t.status) && t.progress!=='completed');
   const red = scope.filter(t=>andonLevel(t)==='red');
   const amber = scope.filter(t=>andonLevel(t)==='amber');
@@ -845,7 +877,19 @@ function openTeamMember(memberId=null){
 async function deleteTeamMember(memberId){
   const member=userById(memberId); if(!member) return;
   if(!confirm(`Delete ${member.name}? Their assigned tasks will become unassigned.`)) return;
-  try{const result=await Store.deleteMember(memberId);taskWriteWarnings(result);render();toast('🗑️ Team member deleted');}catch(error){toast(error.message);}
+  // try{const result=await Store.deleteMember(memberId);taskWriteWarnings(result);render();toast('🗑️ Team member deleted');}catch(error){toast(error.message);}
+  try{
+  const result=await Store.deleteMember(memberId);
+  taskWriteWarnings(result);
+
+  await Store.load();
+
+  render();
+  buildNav();
+  toast('🗑️ Team member deleted');
+}catch(error){
+  toast(error.message);
+}
 }
 
 /* ---------- SETTINGS ---------- */
@@ -1334,7 +1378,16 @@ setInterval(()=>{
 }, 1000);
 
 // refresh whole board occasionally so cards re-sort / lights update
-setInterval(()=>{ if(session && ['andon','dashboard','kanban'].includes(route)) render(); }, 30000);
+// setInterval(()=>{ if(session && ['andon','dashboard','kanban'].includes(route)) render(); }, 30000);
+// Refresh Andon and Kanban every 30 seconds
+setInterval(()=>{
+  if(session && ['andon','kanban'].includes(route)) render();
+}, 30000);
+
+// Refresh Dashboard every 2 minutes
+setInterval(()=>{
+  if(session && route === 'dashboard') render();
+}, 120000);
 
 /* ============================================================
    GLOBAL WIRING
