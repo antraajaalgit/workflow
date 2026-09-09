@@ -149,6 +149,33 @@ public function adminListing(string $actorId, ?string $status = null): array
         });
     }
 
+    /** Holiday CRUD calls this inside the shared writer transaction; review audit stays intact. */
+    public function recalculateForCalendar(): void
+    {
+        abort_unless(DB::transactionLevel() > 0, 409, 'Calendar recalculation requires a transaction.');
+        $requests = DB::table('leave_requests')->where('status', 'approved')->orderBy('reviewed_at')->orderBy('id')->get();
+        DB::table('leave_request_days')->whereIn('leave_request_id', $requests->pluck('id'))->delete();
+        $remaining = []; $covered = [];
+        foreach ($requests as $request) {
+            $dates = $this->policy->qualifyingDates($request->start_date, $request->end_date);
+            $paid = 0; $unpaid = 0;
+            foreach ($dates as $date) {
+                $key = $request->user_id.':'.$date;
+                abort_if(isset($covered[$key]), 409, 'Holiday change would create overlapping approved leave. Review the affected leave requests first.');
+                $covered[$key] = true;
+                $yearKey = $request->user_id.':'.$this->policy->date($date)->year;
+                $remaining[$yearKey] ??= (int) config('attendance.annual_paid_leave_days');
+                $type = $remaining[$yearKey] > 0 ? 'paid' : 'unpaid';
+                if ($type === 'paid') { $remaining[$yearKey]--; $paid++; } else $unpaid++;
+                DB::table('leave_request_days')->insert(['id' => (string) Str::uuid(), 'leave_request_id' => $request->id, 'leave_date' => $date, 'type' => $type]);
+            }
+            DB::table('leave_requests')->where('id', $request->id)->update(['qualifying_days' => count($dates), 'paid_leave_days' => $paid, 'unpaid_leave_days' => $unpaid, 'updated_at' => now()]);
+        }
+        foreach (DB::table('leave_requests')->where('status', 'pending')->get() as $request) {
+            DB::table('leave_requests')->where('id', $request->id)->update(['qualifying_days' => count($this->policy->qualifyingDates($request->start_date, $request->end_date))]);
+        }
+    }
+
     private function find(string $id, bool $lock = false): object
     {
         $query = DB::table('leave_requests')->where('id', $id);

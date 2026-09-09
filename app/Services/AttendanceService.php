@@ -97,7 +97,8 @@ class AttendanceService
         $date = $now->toDateString();
         $weeklyOff = $this->policy->isWeeklyOff($date);
         $override = $this->policy->hasOverride($actorId, $date);
-        $working = ! $weeklyOff || $override;
+        $holiday = $this->policy->holidayName($date);
+        $working = $this->policy->isWorkingDay($actorId, $date);
         $leave = DB::table('leave_request_days as days')
             ->join('leave_requests as requests', 'requests.id', '=', 'days.leave_request_id')
             ->where('requests.user_id', $actorId)->where('requests.status', 'approved')
@@ -114,6 +115,7 @@ class AttendanceService
         // Leave approved after check-in does not prevent closing an existing work session.
         $canCheckOut = $working && $row && $row->status === 'present' && $row->check_in_at && ! $row->check_out_at;
         $message = match (true) {
+            ! $working && $holiday !== null => 'Holiday – '.$holiday,
             ! $working => 'Office Closed – Weekly Off',
             $row !== null && $row->check_out_at !== null => 'You have already checked out today.',
             $row !== null && $row->check_in_at !== null => 'You have already checked in today.',
@@ -125,7 +127,8 @@ class AttendanceService
 
         return ['attendance_date' => $date, 'timezone' => $this->policy->timezone(),
             'server_timestamp' => $now->toIso8601String(),
-            'day_type' => $weeklyOff ? ($override ? 'overtime' : 'weekly_off') : 'working_day',
+            'day_type' => ($weeklyOff || $holiday !== null) ? ($override ? 'overtime' : ($holiday !== null ? 'holiday' : 'weekly_off')) : 'working_day',
+            'holiday_name' => $holiday, 'is_holiday' => $holiday !== null,
             'is_working_day' => $working, 'is_weekly_off' => $weeklyOff, 'has_overtime_override' => $override,
             'approved_leave_type' => $leave, 'attendance' => $attendance,
             'can_check_in' => $canCheckIn, 'can_check_out' => (bool) $canCheckOut, 'message' => $message];

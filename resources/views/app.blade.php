@@ -40,6 +40,7 @@
   <div id="modal-host"></div>
   <script src="{{ asset('assets/js/store.js') }}?v=17"></script>
   <script src="{{ asset('assets/js/attendance.js') }}?v=1"></script>
+  <script src="{{ asset('assets/js/admin-holidays.js') }}?v=1"></script>
   <script src="{{ asset('assets/js/admin-attendance.js') }}?v=1"></script>
   <script src="{{ asset('assets/js/leave.js') }}?v=1"></script>
   <script src="{{ asset('assets/js/admin-leave.js') }}?v=1"></script>
