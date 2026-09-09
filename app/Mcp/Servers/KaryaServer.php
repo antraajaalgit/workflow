@@ -36,6 +36,10 @@ use App\Mcp\Tools\RevokeOvertimeTool;
 use App\Mcp\Tools\ListLeaveRequestsTool;
 use App\Mcp\Tools\ReviewLeaveRequestTool;
 use App\Mcp\Tools\GetLeaveBalanceTool;
+use App\Mcp\Tools\ListHolidaysTool;
+use App\Mcp\Tools\CreateHolidayTool;
+use App\Mcp\Tools\UpdateHolidayTool;
+use App\Mcp\Tools\DeleteHolidayTool;
 
 #[Name('Karya Server')]
 #[Version('0.0.1')]
@@ -43,6 +47,10 @@ use App\Mcp\Tools\GetLeaveBalanceTool;
 class KaryaServer extends Server
 {
     protected array $tools = [
+        ListHolidaysTool::class,
+        CreateHolidayTool::class,
+        UpdateHolidayTool::class,
+        DeleteHolidayTool::class,
         ListAttendanceTool::class,
         AuthorizeOvertimeTool::class,
         RevokeOvertimeTool::class,
