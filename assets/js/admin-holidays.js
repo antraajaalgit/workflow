@@ -13,7 +13,20 @@
       host.setAttribute('aria-busy',String(busy));
       host.oninput=e=>{if(['name','start_date','end_date','notes'].includes(e.target.name))draft[e.target.name]=e.target.value;};
       host.onsubmit=e=>{e.preventDefault();save();};
-      host.onclick=e=>{const b=e.target.closest('button');if(!b||busy)return;if(b.hasAttribute('data-refresh'))refresh();if(b.hasAttribute('data-cancel')){draft={};paint();}if(b.dataset.edit){draft={...rows.find(r=>r.id===b.dataset.edit)};paint();}if(b.dataset.delete&&globalThis.confirm('Delete this holiday?'))remove(b.dataset.delete);};
+      host.onclick=e=>{const b=e.target.closest('button');if(!b||busy)return;if(b.hasAttribute('data-refresh'))refresh();if(b.hasAttribute('data-cancel')){draft={};paint();}
+      // if(b.dataset.edit){draft={...rows.find(r=>r.id===b.dataset.edit)};paint();}
+      if(b.dataset.edit){
+  const holiday=rows.find(r=>r.id===b.dataset.edit);
+  if(!holiday)return;
+
+  draft={...holiday};
+  paint();
+
+  const form=host.querySelector('[data-holiday-form]');
+  form?.scrollIntoView({behavior:'smooth',block:'start'});
+  form?.querySelector('input[name="name"]')?.focus();
+}
+      if(b.dataset.delete&&globalThis.confirm('Delete this holiday?'))remove(b.dataset.delete);};
     }
     async function run(operation){if(busy||!active(epoch))return;const token=epoch;busy=true;error='';paint();try{await operation(token);}catch(e){if(active(token))error=e.message||'Holiday operation failed.';}finally{if(active(token)){busy=false;paint();}}}
     async function read(token){const result=await request('/api/admin/holidays','GET');if(active(token))rows=result.holidays;}
