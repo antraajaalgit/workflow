@@ -8,6 +8,7 @@ let employeeAttendance = null;
 let employeeLeave = null;
 let adminAttendance = null;
 let adminLeave = null;
+let adminHolidays = null;
 let route = 'dashboard';
 let routeParam = null;
 let tasksPage = 1;
@@ -229,6 +230,7 @@ async function signOut(){
   employeeLeave?.reset();
   adminAttendance?.reset();
   adminLeave?.reset();
+  adminHolidays?.reset();
   await Store.signOut();
   toggleDrawer(false);
   session = null;
@@ -254,6 +256,7 @@ const NAV = {
     {id:'recurring', ic:'🔁', label:'Recurring Tasks'},
     {id:'tasks', ic:'✅', label:'Tasks'},
     {id:'admin-attendance', ic:'📅', label:'Attendance'},
+    {id:'admin-holidays', ic:'🗓️', label:'Holidays'},
     {id:'admin-leave', ic:'🏖️', label:'Leave Requests'},
     {sep:'Manage'},
     {id:'departments', ic:'🏢', label:'Departments'},
@@ -289,13 +292,14 @@ function go(r, param=null){ route=r; routeParam=param; buildNav(); render(); }
 /* ============================================================
    RENDER ROUTER
 ============================================================ */
-const TITLES = {'admin-attendance':'Team Attendance', 'admin-leave':'Leave Requests',dashboard:'Dashboard', projects:'Projects', andon:'Andon Board', kanban:'Kanban Flow', clients:'Client Folders', inbox:'Inbox', recurring:'Recurring Tasks', tasks:'Tasks', departments:'Departments', team:'Team & Workload', settings:'Settings', 'my-requests':'My Requests', 'new-request':'New Request', messages:'Messages', 'client-folder':'Client Folder'};
+const TITLES = {'admin-holidays':'Holidays','admin-attendance':'Team Attendance', 'admin-leave':'Leave Requests',dashboard:'Dashboard', projects:'Projects', andon:'Andon Board', kanban:'Kanban Flow', clients:'Client Folders', inbox:'Inbox', recurring:'Recurring Tasks', tasks:'Tasks', departments:'Departments', team:'Team & Workload', settings:'Settings', 'my-requests':'My Requests', 'new-request':'New Request', messages:'Messages', 'client-folder':'Client Folder'};
 function render(){
   const pageTitle = $('#page-title');
   const v = $('#view');
   if (!pageTitle || !v || !session || !S()) return;
   pageTitle.textContent = TITLES[route] || '';
   const R = {
+    'admin-holidays': () => session.role==='admin' ? '<section id="admin-holidays" class="card"></section>' : '<p>Admin access required.</p>',
     'admin-attendance': () => session.role === 'admin' ? '<section id="admin-attendance" class="card"></section>' : '<p>Admin access required.</p>',
     dashboard: viewDashboard, projects: viewProjects, andon: viewAndon, kanban: viewKanban,
     clients: viewClients, 'client-folder': viewClientFolder, inbox: viewInbox,
@@ -320,6 +324,10 @@ function render(){
   });
   employeeLeave.mount(document.querySelector('#employee-leave'));
 } else employeeLeave?.unmount();
+  if (route === 'admin-holidays' && session.role === 'admin') {
+    adminHolidays ||= AdminHolidays.create({request: (...args) => Store.taskJson(...args), getUser: () => session});
+    adminHolidays.mount(document.querySelector('#admin-holidays'));
+  } else adminHolidays?.unmount();
   if (route === 'admin-attendance' && session.role === 'admin') {
     adminAttendance ||= AdminAttendance.create({request: (...args) => Store.taskJson(...args), getUser: () => session});
     adminAttendance.mount(document.querySelector('#admin-attendance'));

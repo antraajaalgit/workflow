@@ -11,6 +11,10 @@ use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\AdminLeaveController;
 
 Route::prefix('api')->group(function () {
+    Route::get('/admin/holidays', [\App\Http\Controllers\AdminHolidayController::class, 'index']);
+    Route::post('/admin/holidays', [\App\Http\Controllers\AdminHolidayController::class, 'store']);
+    Route::put('/admin/holidays/{id}', [\App\Http\Controllers\AdminHolidayController::class, 'update']);
+    Route::delete('/admin/holidays/{id}', [\App\Http\Controllers\AdminHolidayController::class, 'destroy']);
     Route::get('/admin/attendance', [AdminAttendanceController::class, 'index']);
     Route::post('/admin/attendance/overrides', [AdminAttendanceController::class, 'store']);
     Route::delete('/admin/attendance/overrides/{id}', [AdminAttendanceController::class, 'destroy']);

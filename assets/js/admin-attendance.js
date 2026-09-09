@@ -16,15 +16,15 @@
       if (!host) return;
       const disabled=busy?' disabled':'';
       const rows=(data?.rows||[]).map(row=>`<tr><th scope="row">${esc(row.name)}</th>
-        <td>${esc(labels[row.status]||row.status)}${row.approved_leave_type && row.status!==row.approved_leave_type+'_leave'?`<div class="small">Approved ${row.approved_leave_type==='paid'?'Paid':'Unpaid'} Leave</div>`:''}</td>
+        <td>${esc(row.status==='holiday'?'Holiday – '+row.holiday_name:(labels[row.status]||row.status))}${row.approved_leave_type && row.status!==row.approved_leave_type+'_leave'?`<div class="small">Approved ${row.approved_leave_type==='paid'?'Paid':'Unpaid'} Leave</div>`:''}</td>
         <td>${esc(clock(row.check_in_at,data.timezone))}</td><td>${esc(clock(row.check_out_at,data.timezone))}</td>
         <td>${row.is_late?'Late':'—'}</td><td>${row.is_early_checkout?'Early Checkout':'—'}</td>
         <td>${row.worked_minutes===null?'—':`${Math.floor(row.worked_minutes/60)}h ${row.worked_minutes%60}m`}</td>
-        <td>${row.has_overtime_override?'Overtime authorized':row.override?'Override revoked':row.is_weekly_off?'Weekly Off':'Working day'}
+        <td>${row.has_overtime_override?'Overtime authorized':row.override?'Override revoked':row.is_holiday?'Holiday':row.is_weekly_off?'Weekly Off':'Working day'}
           ${row.override?.notes?`<div class="small muted">${esc(row.override.notes)}</div>`:''}</td>
         <td>${row.can_authorize_override?`<button type="button" class="btn small" data-overtime-create="${esc(row.user_id)}"${disabled}>Authorize overtime</button>`:''}
           ${row.can_revoke_override?`<button type="button" class="btn-ghost small" data-overtime-revoke="${esc(row.override.id)}"${disabled}>Revoke overtime</button>`:''}</td></tr>`).join('');
-      host.innerHTML=`<div class="section-head"><div><h2>Team attendance</h2><p class="muted small">${esc(data?.timezone||'Asia/Kolkata')} · Review attendance and authorize weekly-off work.</p></div></div>
+      host.innerHTML=`<div class="section-head"><div><h2>Team attendance</h2><p class="muted small">${esc(data?.timezone||'Asia/Kolkata')} · Review attendance and authorize weekly-off or holiday work.</p></div></div>
         <form data-attendance-filters class="admin-attendance-filters"><label>Date<input name="date" type="date" value="${esc(date)}" required${disabled}></label>
           <label>Team member<select name="employee"${disabled}><option value="">All team members</option>${(data?.employees||[]).map(user=>`<option value="${esc(user.id)}"${employee===user.id?' selected':''}>${esc(user.name)}</option>`).join('')}</select></label>
           <button type="submit" class="btn"${disabled}>Apply filters / Refresh</button></form>

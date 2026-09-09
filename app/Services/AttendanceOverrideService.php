@@ -14,7 +14,7 @@ class AttendanceOverrideService
         return $this->writes->run(function () use ($actorId, $userId, $date, $notes) {
             $this->access->admin($actorId, $userId);
             $this->access->employee($userId);
-            abort_unless($this->policy->isWeeklyOff($date), 422, 'Overtime override requires a weekly-off date.');
+            abort_unless($this->policy->isNonWorkingDay($date), 422, 'Overtime override requires a weekly-off or holiday date.');
             abort_if(DB::table('attendance_working_day_overrides')->where('user_id', $userId)->where('work_date', $date)->exists(),
                 409, 'An override already exists for this employee and date.');
             $id = (string) Str::uuid();

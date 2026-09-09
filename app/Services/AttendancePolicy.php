@@ -64,6 +64,19 @@ class AttendancePolicy
         return $this->isSunday($date) || $this->isSecondSaturday($date);
     }
 
+    public function holidayName(string $date): ?string
+    {
+        $this->date($date);
+        $names = DB::table('holidays')->where('start_date', '<=', $date)->where('end_date', '>=', $date)
+            ->orderBy('name')->pluck('name')->all();
+        return $names ? implode(', ', $names) : null;
+    }
+
+    public function isNonWorkingDay(string $date): bool
+    {
+        return $this->isWeeklyOff($date) || $this->holidayName($date) !== null;
+    }
+
     public function hasOverride(string $userId, string $date): bool
     {
         $this->date($date);
@@ -74,7 +87,7 @@ class AttendancePolicy
 
     public function isWorkingDay(string $userId, string $date): bool
     {
-        return ! $this->isWeeklyOff($date) || $this->hasOverride($userId, $date);
+        return ! $this->isNonWorkingDay($date) || $this->hasOverride($userId, $date);
     }
 
     public function shiftStart(string $date): CarbonImmutable
@@ -109,7 +122,7 @@ class AttendancePolicy
         }
         $dates = [];
         for ($day = $first; $day->lessThanOrEqualTo($last); $day = $day->addDay()) {
-            if (! $this->isWeeklyOff($day->toDateString())) {
+            if (! $this->isNonWorkingDay($day->toDateString())) {
                 $dates[] = $day->toDateString();
             }
         }

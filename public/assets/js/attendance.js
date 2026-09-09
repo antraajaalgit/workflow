@@ -38,7 +38,7 @@
       if (!host) return;
       const record = state?.attendance;
       const labels = {present:'Present', absent:'Absent', paid_leave:'Paid Leave', unpaid_leave:'Unpaid Leave', weekly_off:'Office Closed – Weekly Off'};
-      const status = record ? (labels[record.status] || 'Attendance unavailable') :
+      const status = state?.day_type==='holiday' && !record?.check_in_at ? 'Holiday – '+state.holiday_name : record ? (labels[record.status] || 'Attendance unavailable') :
         state?.approved_leave_type ? `Approved ${state.approved_leave_type === 'paid' ? 'Paid' : 'Unpaid'} Leave` :
         state?.day_type === 'weekly_off' ? 'Office Closed – Weekly Off' : state ? 'Not checked in' : 'Attendance unavailable';
       const worked = record?.check_out_at && Number.isFinite(record.worked_minutes)

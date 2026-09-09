@@ -24,12 +24,14 @@ class AdminAttendanceService
             ->where('requests.status', 'approved')->where('days.leave_date', $date)->whereIn('requests.user_id', $ids)
             ->pluck('days.type', 'requests.user_id');
         $weeklyOff = $this->policy->isWeeklyOff($date);
-        $rows = $selected->map(function ($user) use ($records, $overrides, $leave, $weeklyOff) {
+        $holiday = $this->policy->holidayName($date);
+        $nonWorking = $this->policy->isNonWorkingDay($date);
+        $rows = $selected->map(function ($user) use ($records, $overrides, $leave, $weeklyOff, $holiday, $nonWorking) {
             $record = $records->get($user->id);
             $override = $overrides->get($user->id);
             $active = $override !== null && $override->revoked_at === null;
             $leaveType = $leave->get($user->id);
-            $status = $record?->status ?? ($leaveType ? $leaveType.'_leave' : ($weeklyOff && ! $active ? 'weekly_off' : 'not_checked_in'));
+            $status = $holiday !== null && ! $active && ! $record?->check_in_at ? 'holiday' : ($record?->status ?? ($leaveType ? $leaveType.'_leave' : ($weeklyOff && ! $active ? 'weekly_off' : 'not_checked_in')));
 
             return [
                 'user_id' => $user->id, 'name' => $user->name, 'status' => $status,
@@ -37,12 +39,13 @@ class AdminAttendanceService
                 'check_out_at' => $record?->check_out_at ? $this->policy->normalize($record->check_out_at)->toIso8601String() : null,
                 'is_late' => (bool) $record?->is_late, 'is_early_checkout' => (bool) $record?->is_early_checkout,
                 'worked_minutes' => $record?->worked_minutes === null ? null : (int) $record->worked_minutes,
-                'is_weekly_off' => $weeklyOff, 'is_working_day' => ! $weeklyOff || $active,
+                'is_weekly_off' => $weeklyOff, 'is_working_day' => ! $nonWorking || $active,
+                'holiday_name' => $holiday, 'is_holiday' => $holiday !== null,
                 'approved_leave_type' => $leaveType, 'has_overtime_override' => $active,
                 'override' => $override ? ['id' => $override->id, 'active' => $active, 'notes' => $override->notes,
                     'revoked_at' => $override->revoked_at ? $this->policy->normalize($override->revoked_at)->toIso8601String() : null] : null,
                 // Step 1 retains revoked rows and prohibits a second override for the same user/date.
-                'can_authorize_override' => $weeklyOff && $override === null,
+                'can_authorize_override' => $nonWorking && $override === null,
                 'can_revoke_override' => $active,
             ];
         })->values();
