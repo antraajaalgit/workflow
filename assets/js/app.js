@@ -11,6 +11,7 @@ let adminLeave = null;
 let route = 'dashboard';
 let routeParam = null;
 let tasksPage = 1;
+let tasksProjectFilter = 'all';
 
 /* ---------- utils ---------- */
 const esc = (s='') => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -1193,7 +1194,9 @@ async function deleteTask(taskId,modal=null){
    TASKS
 ============================================================ */
 function viewTasks(){
-  const all=tasksByProjectName(session.role==='team'?S().tasks.filter(t=>t.ownerId===session.id):S().tasks),pageSize=10,totalPages=Math.max(1,Math.ceil(all.length/pageSize));tasksPage=Math.min(Math.max(1,tasksPage),totalPages);
+  const visible=session.role==='team'?S().tasks.filter(t=>t.ownerId===session.id):S().tasks;
+  const filtered=visible.filter(t=>tasksProjectFilter==='all'||(tasksProjectFilter==='standalone'?!t.projectId:'project:'+t.projectId===tasksProjectFilter));
+  const all=tasksByProjectName(filtered),pageSize=12,totalPages=Math.max(1,Math.ceil(all.length/pageSize));tasksPage=Math.min(Math.max(1,tasksPage),totalPages);
   const cards=all.slice((tasksPage-1)*pageSize,tasksPage*pageSize).map(t=>{const client=clientById(t.clientId),project=projectById(t.projectId),owner=userById(t.ownerId),completed=t.status==='done'||t.progress==='completed';return `<article class="task-card ${completed?'task-row-completed':''}" data-task="${t.id}">
     <div class="task-card-head"><span class="status-pill">${taskProgressLabel(t.progress)}</span><div class="project-actions"><button class="project-menu-btn" data-task-menu="${t.id}" aria-label="Task actions" aria-expanded="false">⋮</button><div class="project-menu hidden" data-task-menu-popup="${t.id}">${completed?'<button disabled><span>✓</span>Completed</button>':`<button data-complete-task="${t.id}"><span>✓</span>Mark completed</button>`}<button data-edit-task="${t.id}"><span>✏️</span>Edit task</button><button class="danger" data-delete-task="${t.id}"><span>🗑️</span>Delete task</button></div></div></div>
     ${client?`<div class="project-client">${esc(client.company)}</div>`:''}<h3>${esc(t.title)}</h3>
@@ -1203,7 +1206,8 @@ function viewTasks(){
     <div class="task-card-foot"><span>${owner?avatar(owner):''}<span><small>Assigned to</small><b>${owner?esc(owner.name):'Unassigned'}</b></span></span>${t.dueDate?`<time><small>Due</small><b>${new Date(t.dueDate).toLocaleDateString()}</b></time>`:''}</div>
   </article>`;}).join('');
   const pagination=totalPages>1?`<div class="section-head" style="margin-top:14px"><button class="btn-ghost small" data-tasks-page="${tasksPage-1}" ${tasksPage===1?'disabled':''}>← Previous</button><span class="muted small">Page ${tasksPage} of ${totalPages} · ${all.length} tasks</span><button class="btn-ghost small" data-tasks-page="${tasksPage+1}" ${tasksPage===totalPages?'disabled':''}>Next →</button></div>`:'';
-  return `<div class="section-head"><p class="muted">${session.role==='team'?'View and complete tasks assigned to you.':'Create and manage individual tasks across clients and projects.'}</p><button class="btn" ${session.role==='team'?'data-add-team-task':'data-new-task'}>+ New task</button></div><div class="task-card-grid">${cards||'<div class="empty"><div class="e-ic">✅</div>No tasks yet</div>'}</div>${pagination}`;
+  const projectFilter=`<div class="field"><label for="tasks-project-filter">Project</label><select id="tasks-project-filter"><option value="all" ${tasksProjectFilter==='all'?'selected':''}>All Projects</option><option value="standalone" ${tasksProjectFilter==='standalone'?'selected':''}>Standalone Tasks</option>${projectsByName(S().projects||[]).map(p=>`<option value="project:${esc(p.id)}" ${tasksProjectFilter==='project:'+p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`;
+  return `${projectFilter}<div class="section-head"><p class="muted">${session.role==='team'?'View and complete tasks assigned to you.':'Create and manage individual tasks across clients and projects.'}</p><button class="btn" ${session.role==='team'?'data-add-team-task':'data-new-task'}>+ New task</button></div><div class="task-card-grid">${cards||'<div class="empty"><div class="e-ic">✅</div>No tasks yet</div>'}</div>${pagination}`;
 }
 
 async function completeTask(taskId){
@@ -1297,6 +1301,7 @@ function bindView(){
   $$('[data-complete-task]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();completeTask(btn.dataset.completeTask);});
   $$('[data-edit-task]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();openTask(btn.dataset.editTask);});
   $$('[data-delete-task]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();deleteTask(btn.dataset.deleteTask);});
+  const projectFilter=$('#tasks-project-filter'); if(projectFilter) projectFilter.onchange=()=>{tasksProjectFilter=projectFilter.value;tasksPage=1;render();};
   $$('[data-tasks-page]').forEach(btn=>btn.onclick=()=>{if(btn.disabled)return;tasksPage=Number(btn.dataset.tasksPage);render();});
   const am=$('[data-add-member]'); if(am) am.onclick=()=>openTeamMember();
   $$('[data-edit-member]').forEach(b=>b.onclick=()=>openTeamMember(b.dataset.editMember));
