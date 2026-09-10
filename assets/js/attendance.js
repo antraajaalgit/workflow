@@ -99,12 +99,13 @@
       busy = true; error = ''; notice = ''; phase = 'Getting your location…'; paint();
       let sent = false;
       try {
-        const location = await geolocate();
+        let location;
+        try { location = await geolocate(); } catch (_) { location = null; }
         if (!active(token)) return;
         phase = action === 'check-in' ? 'Checking in…' : 'Checking out…'; paint();
         sent = true;
         const result = await request(`/api/attendance/${action}`, 'POST', {
-          latitude: location.latitude, longitude: location.longitude, accuracy: location.accuracy
+          latitude: location?.latitude, longitude: location?.longitude, accuracy: location?.accuracy
         });
         if (!active(token)) return;
         notice = action === 'check-in' ? 'Checked in successfully.' : 'Checked out successfully.';

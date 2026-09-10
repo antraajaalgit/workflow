@@ -11,18 +11,26 @@ class AttendanceGeofence
     private const EARTH_RADIUS_METRES = 6371008.8;
 
     /** Validate and enforce here so non-HTTP callers cannot bypass the fence. */
-    public function validate(array $input): array
+    public function validate(array $input, ?string $requestIp = null): array
     {
-        $location = Validator::make($input, [
+        $validator = Validator::make($input, [
             'latitude' => ['required', 'numeric', 'between:-90,90'],
             'longitude' => ['required', 'numeric', 'between:-180,180'],
             'accuracy' => ['required', 'numeric', 'gt:0'],
-        ])->validate();
+        ]);
         $settings = $this->settings();
         abort_unless($settings, 503, 'Office geofence is not configured. Contact an administrator.');
-        $location = array_map(fn ($value) => (float) $value, $location);
-        if (! is_finite($location['accuracy']) || $location['accuracy'] > $settings['max_accuracy_metres']) {
-            throw ValidationException::withMessages(['accuracy' => 'Location accuracy is insufficient. Obtain a more accurate location and retry.']);
+        $errors = $validator->errors()->messages();
+        $location = $errors ? [] : array_map(fn ($value) => (float) $value, $validator->validated());
+        if (! $errors && (! is_finite($location['accuracy']) || $location['accuracy'] > $settings['max_accuracy_metres'])) {
+            $errors['accuracy'] = ['Location accuracy is insufficient. Obtain a more accurate location and retry.'];
+        }
+        if ($errors) {
+            if ($this->isOfficeIp($requestIp)) {
+                // Do not record unusable coordinates as a verified location.
+                return ['latitude' => null, 'longitude' => null, 'accuracy' => null];
+            }
+            throw ValidationException::withMessages(['office_ip' => ['Location is missing or unusable. Office-network fallback failed: connect to an approved office network or provide an accurate location.']] + $errors);
         }
         $distance = $this->distanceMetres($location['latitude'], $location['longitude'],
             $settings['office_latitude'], $settings['office_longitude']);
@@ -31,6 +39,21 @@ class AttendanceGeofence
         }
 
         return $location;
+    }
+
+    private function isOfficeIp(?string $requestIp): bool
+    {
+        if ($requestIp === null || filter_var($requestIp, FILTER_VALIDATE_IP) === false) {
+            return false;
+        }
+        foreach (config('attendance.office_ips', []) as $approved) {
+            if (is_string($approved) && filter_var(trim($approved), FILTER_VALIDATE_IP) !== false
+                && inet_pton(trim($approved)) === inet_pton($requestIp)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** Great-circle distance using Haversine, clamped against floating-point drift. */

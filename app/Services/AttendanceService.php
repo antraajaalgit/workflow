@@ -19,14 +19,14 @@ class AttendanceService
         return $this->state($actorId, $this->policy->now());
     }
 
-    public function checkIn(string $actorId, array $location = []): array
+    public function checkIn(string $actorId, array $location = [], ?string $requestIp = null): array
     {
-        return $this->write(function () use ($actorId, $location) {
+        return $this->write(function () use ($actorId, $location, $requestIp) {
             $this->lockEmployee($actorId);
             $now = $this->policy->now();
             $state = $this->state($actorId, $now);
             abort_unless($state['can_check_in'], 409, $state['message']);
-            $location = $this->geofence->validate($location);
+            $location = $this->geofence->validate($location, $requestIp);
             DB::table('attendance_records')->insert([
                 'id' => (string) Str::uuid(), 'user_id' => $actorId, 'attendance_date' => $now->toDateString(),
                 'check_in_at' => $now->toDateTimeString(), 'status' => 'present',
@@ -40,9 +40,9 @@ class AttendanceService
         });
     }
 
-    public function checkOut(string $actorId, array $location = []): array
+    public function checkOut(string $actorId, array $location = [], ?string $requestIp = null): array
     {
-        return $this->write(function () use ($actorId, $location) {
+        return $this->write(function () use ($actorId, $location, $requestIp) {
             $this->lockEmployee($actorId);
             $now = $this->policy->now();
             $state = $this->state($actorId, $now);
@@ -51,7 +51,7 @@ class AttendanceService
             abort_unless($row && $row->check_in_at && $row->status === 'present', 409, 'You have not checked in today.');
             abort_if($row->check_out_at !== null, 409, 'You have already checked out today.');
             abort_unless($state['can_check_out'], 409, $state['message']);
-            $location = $this->geofence->validate($location);
+            $location = $this->geofence->validate($location, $requestIp);
             $checkIn = $this->policy->normalize($row->check_in_at);
             abort_if($now->lessThan($checkIn), 409, 'Checkout time cannot precede check-in. Please retry later.');
             $minutes = intdiv($now->getTimestamp() - $checkIn->getTimestamp(), 60);

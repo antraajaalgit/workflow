@@ -35,7 +35,7 @@ class AttendanceController extends Controller
             abort_unless(is_string($id) && $id !== '', 401, 'Please sign in.');
             // Only location is client-supplied; owner, date, time and flags remain server-owned.
             $result = $operation === 'today' ? $this->attendance->today($id)
-                : $this->attendance->$operation($id, $request->only(['latitude', 'longitude', 'accuracy']));
+                : $this->attendance->$operation($id, $request->only(['latitude', 'longitude', 'accuracy']), $request->ip());
         } catch (ValidationException $exception) {
             $result = ['message' => $exception->getMessage(), 'errors' => $exception->errors()];
             $status = 422;

@@ -7,6 +7,7 @@ return [
     'shift_end' => '18:30',
     'grace_minutes' => 15,
     'annual_paid_leave_days' => 12,
+    'office_ips' => array_values(array_filter(array_map('trim', explode(',', env('ATTENDANCE_OFFICE_IPS', ''))))),
     // Fail closed until the real office location and policy limits are supplied.
     'geofence' => [
         'office_latitude' => env('ATTENDANCE_OFFICE_LATITUDE'),

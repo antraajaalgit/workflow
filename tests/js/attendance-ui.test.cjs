@@ -70,10 +70,10 @@ for (const file of ['assets/js/attendance.js', 'public/assets/js/attendance.js']
     assert.doesNotMatch(s.element.innerHTML,/1\.234|2\.345|office_latitude|radius_metres/);
   });
   for(const [code,message] of [[1,/permission denied/],[2,/location is unavailable/],[3,/timed out/]]) {
-    test(file+': location failure '+code+' is clear and never sends POST',async()=>{
+    test(file+': location failure '+code+' sends POST for backend fallback',async()=>{
       const s=setup({geo:(_ok,bad)=>bad({code})});await s.card.mount(s.element);await s.card.act('check-in');
-      assert.match(s.element.innerHTML,message);assert.match(s.element.innerHTML,/role="alert"/);
-      assert.equal(s.calls.length,1);assert.doesNotMatch(s.element.innerHTML,/data-attendance-action="check-in" disabled/);
+      assert.deepEqual(s.calls.map(c=>c.method),['GET','POST','GET']);
+      assert.equal(JSON.stringify(s.calls[1].payload),'{}');assert.doesNotMatch(s.element.innerHTML,/data-attendance-action="check-in" disabled/);
     });
   }
   for(const message of ['You are outside the allowed office attendance radius.','Location accuracy is insufficient. Obtain a more accurate location and retry.']) {
@@ -83,6 +83,12 @@ for (const file of ['assets/js/attendance.js', 'public/assets/js/attendance.js']
       assert.doesNotMatch(s.element.innerHTML,/Checked in successfully/);
     });
   }
+  for (const action of ['check-in','check-out']) test(file+': coarse location reaches backend for '+action,async()=>{
+    const s=setup({initial:action==='check-in'?before():checkedIn(),geo:ok=>ok({coords:{...coordinates,accuracy:5000}})});
+    await s.card.mount(s.element);await s.card.act(action);
+    assert.equal(s.calls[1].payload.accuracy,5000);
+    assert.deepEqual(s.calls.map(c=>c.method),['GET','POST','GET']);
+  });
   test(file+': double click is blocked across geolocation, POST and dashboard redraw',async()=>{
     let acceptLocation; const saving=deferred();
     const s=setup({geo:ok=>{acceptLocation=ok;},post:()=>saving.promise});await s.card.mount(s.element);
@@ -117,7 +123,8 @@ for (const file of ['assets/js/attendance.js', 'public/assets/js/attendance.js']
   });
   test(file+': insecure browser gives actionable location error',async()=>{
     const s=setup({secure:false});await s.card.mount(s.element);await s.card.act('check-in');
-    assert.match(s.element.innerHTML,/HTTPS or localhost/);assert.equal(s.calls.length,1);
+    assert.deepEqual(s.calls.map(c=>c.method),['GET','POST','GET']);
+    assert.equal(JSON.stringify(s.calls[1].payload),'{}');
   });
 }
 
