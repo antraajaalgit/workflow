@@ -47,6 +47,98 @@ class AttendanceGeofenceTest extends TestCase
         }
     }
 
+    public function test_office_fallback_accepts_missing_coarse_and_invalid_locations_for_both_operations(): void
+    {
+        config(['attendance.office_ips' => ['198.51.100.1', '223.178.210.107']]);
+        $this->withServerVariables(['REMOTE_ADDR' => '223.178.210.107']);
+        foreach ([[], ['accuracy' => 5000] + $this->inside, ['latitude' => 'bad'] + $this->inside] as $location) {
+            DB::table('attendance_records')->delete();
+            $this->postJson('/api/attendance/check-in', $location)->assertCreated();
+            $this->postJson('/api/attendance/check-out', $location)->assertOk();
+            $row = DB::table('attendance_records')->first();
+            $this->assertNotNull($row->check_out_at);
+            foreach (['check_in', 'check_out'] as $prefix) {
+                foreach (['latitude', 'longitude', 'accuracy'] as $field) {
+                    $this->assertNull($row->{$prefix.'_'.$field});
+                }
+            }
+        }
+    }
+
+    public function test_office_ip_cannot_override_an_accurate_outside_location(): void
+    {
+        config(['attendance.office_ips' => ['223.178.210.107']]);
+        $this->withServerVariables(['REMOTE_ADDR' => '223.178.210.107']);
+        $outside = ['latitude' => 1] + $this->inside;
+        $this->postJson('/api/attendance/check-in', $outside)->assertUnprocessable()->assertJsonValidationErrors('location');
+        $this->postJson('/api/attendance/check-in', $this->inside)->assertCreated();
+        $this->postJson('/api/attendance/check-out', $outside)->assertUnprocessable()->assertJsonValidationErrors('location');
+    }
+
+    public function test_untrusted_forwarding_headers_and_body_cannot_spoof_office_ip(): void
+    {
+        config(['attendance.office_ips' => ['223.178.210.107'], 'trustedproxy.proxies' => []]);
+        $this->withServerVariables(['REMOTE_ADDR' => '198.51.100.10']);
+        $headers = ['X-Forwarded-For' => '223.178.210.107', 'Forwarded' => 'for=223.178.210.107',
+            'X-Real-IP' => '223.178.210.107'];
+        foreach (['check-in', 'check-out'] as $operation) {
+            if ($operation === 'check-out') {
+                $this->postJson('/api/attendance/check-in', $this->inside)->assertCreated();
+            }
+            foreach ([[], ['accuracy' => 5000] + $this->inside] as $location) {
+                $this->postJson('/api/attendance/'.$operation, $location + ['requestIp' => '223.178.210.107'], $headers)
+                    ->assertUnprocessable()->assertJsonValidationErrors('office_ip');
+            }
+        }
+        $this->assertDatabaseHas('attendance_records', ['check_out_at' => null]);
+    }
+
+    public function test_explicit_trusted_proxy_resolves_client_and_rejects_non_office_client(): void
+    {
+        config(['attendance.office_ips' => ['223.178.210.107'], 'trustedproxy.proxies' => ['192.0.2.10']]);
+        $this->withServerVariables(['REMOTE_ADDR' => '192.0.2.10']);
+        $this->postJson('/api/attendance/check-in', [], ['X-Forwarded-For' => '223.178.210.107'])->assertCreated();
+        $this->postJson('/api/attendance/check-out', [], ['X-Forwarded-For' => '223.178.210.107, 198.51.100.10'])
+            ->assertUnprocessable()->assertJsonValidationErrors('office_ip');
+        $this->postJson('/api/attendance/check-out', [], ['X-Forwarded-For' => '223.178.210.107'])->assertOk();
+    }
+
+    public function test_direct_office_peer_ignores_forwarded_headers_when_another_proxy_is_trusted(): void
+    {
+        config(['attendance.office_ips' => ['223.178.210.107'], 'trustedproxy.proxies' => ['192.0.2.10']]);
+        $this->withServerVariables(['REMOTE_ADDR' => '223.178.210.107']);
+        $headers = ['X-Forwarded-For' => '198.51.100.10'];
+        $this->postJson('/api/attendance/check-in', [], $headers)->assertCreated();
+        $this->postJson('/api/attendance/check-out', [], $headers)->assertOk();
+    }
+
+    public function test_unlisted_peer_cannot_spoof_office_ip_when_another_proxy_is_trusted(): void
+    {
+        config(['attendance.office_ips' => ['223.178.210.107'], 'trustedproxy.proxies' => ['192.0.2.10']]);
+        $this->withServerVariables(['REMOTE_ADDR' => '198.51.100.10']);
+        $this->postJson('/api/attendance/check-in', [], ['X-Forwarded-For' => '223.178.210.107'])
+            ->assertUnprocessable()->assertJsonValidationErrors('office_ip');
+        $this->assertDatabaseCount('attendance_records', 0);
+    }
+
+    public function test_missing_or_unsafe_proxy_config_cannot_enable_implicit_trust(): void
+    {
+        config(['attendance.office_ips' => ['223.178.210.107']]);
+        $this->withServerVariables(['REMOTE_ADDR' => '198.51.100.10']);
+        \Illuminate\Http\Middleware\TrustProxies::at('*');
+        try {
+            foreach ([null, [], '*', ['*', 'REMOTE_ADDR']] as $proxies) {
+                config(['trustedproxy.proxies' => $proxies]);
+                $this->postJson('https://attendance.on-forge.com/api/attendance/check-in', [],
+                    ['X-Forwarded-For' => '223.178.210.107'])
+                    ->assertUnprocessable()->assertJsonValidationErrors('office_ip');
+            }
+            $this->assertDatabaseCount('attendance_records', 0);
+        } finally {
+            \Illuminate\Http\Middleware\TrustProxies::flushState();
+        }
+    }
+
     public function test_inside_radius_accepts_accuracy_and_stores_each_operations_location(): void
     {
         $this->postJson('/api/attendance/check-in', $this->inside)->assertCreated()
