@@ -255,4 +255,24 @@ class AttendanceGeofenceTest extends TestCase
         $this->postJson('/api/attendance/check-in', $this->inside)->assertConflict()->assertJsonPath('message', 'Approved Paid Leave');
         $this->assertDatabaseCount('attendance_records', 0);
     }
+
+    public function test_office_hostname_fallback_accepts_current_resolved_ipv4(): void
+{
+    $resolved = gethostbynamel('localhost');
+
+    $this->assertIsArray($resolved);
+    $this->assertNotEmpty($resolved);
+
+    config([
+        'attendance.office_ips' => [],
+        'attendance.office_hostnames' => ['localhost'],
+    ]);
+
+    $this->withServerVariables([
+        'REMOTE_ADDR' => $resolved[0],
+    ]);
+
+    $this->postJson('/api/attendance/check-in', [])
+        ->assertCreated();
+}
 }

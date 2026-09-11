@@ -42,19 +42,44 @@ class AttendanceGeofence
     }
 
     private function isOfficeIp(?string $requestIp): bool
-    {
-        if ($requestIp === null || filter_var($requestIp, FILTER_VALIDATE_IP) === false) {
-            return false;
+{
+    if ($requestIp === null || filter_var($requestIp, FILTER_VALIDATE_IP) === false) {
+        return false;
+    }
+
+    foreach (config('attendance.office_ips', []) as $approved) {
+        if (
+            is_string($approved)
+            && filter_var(trim($approved), FILTER_VALIDATE_IP) !== false
+            && inet_pton(trim($approved)) === inet_pton($requestIp)
+        ) {
+            return true;
         }
-        foreach (config('attendance.office_ips', []) as $approved) {
-            if (is_string($approved) && filter_var(trim($approved), FILTER_VALIDATE_IP) !== false
-                && inet_pton(trim($approved)) === inet_pton($requestIp)) {
+    }
+
+    foreach (config('attendance.office_hostnames', []) as $hostname) {
+        if (! is_string($hostname) || trim($hostname) === '') {
+            continue;
+        }
+
+        $resolvedIps = @gethostbynamel(trim($hostname));
+
+        if ($resolvedIps === false) {
+            continue;
+        }
+
+        foreach ($resolvedIps as $resolvedIp) {
+            if (
+                filter_var($resolvedIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false
+                && inet_pton($resolvedIp) === inet_pton($requestIp)
+            ) {
                 return true;
             }
         }
-
-        return false;
     }
+
+    return false;
+}
 
     /** Great-circle distance using Haversine, clamped against floating-point drift. */
     public function distanceMetres(float $latitude, float $longitude, float $officeLatitude, float $officeLongitude): float
