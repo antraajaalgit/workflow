@@ -1,6 +1,12 @@
 <?php
 
 return [
+    'ddns' => [
+        'enabled' => env('ATTENDANCE_DDNS_ENABLED', true),
+        'hostname' => env('ATTENDANCE_DDNS_HOSTNAME', 'karya-office.dedyn.io'),
+        'token' => env('ATTENDANCE_DDNS_TOKEN', ''),
+        'heartbeat_secret' => env('ATTENDANCE_DDNS_HEARTBEAT_SECRET', ''),
+    ],
     // Explicit domain timezone; never inherit a browser or PHP default timezone.
     'timezone' => 'Asia/Kolkata',
     'shift_start' => '09:30',

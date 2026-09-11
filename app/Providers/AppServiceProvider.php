@@ -20,6 +20,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        \Illuminate\Support\Facades\RateLimiter::for('attendance-ddns', function (\Illuminate\Http\Request $request) {
+            return \Illuminate\Cache\RateLimiting\Limit::perMinutes(5, 2)
+                ->by('attendance-ddns:'.$request->ip())
+                ->response(fn () => response()->json(['success' => false, 'status' => 'rate_limited'], 429));
+        });
+
         Passport::authorizationView(function ($parameters) {
             return view('mcp.authorize', $parameters);
         });
