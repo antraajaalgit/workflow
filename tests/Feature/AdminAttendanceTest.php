@@ -9,6 +9,7 @@ use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\TestCase;
 use Illuminate\Support\Facades\DB;
 use Tests\IsolatedDatabase;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class AdminAttendanceTest extends TestCase
 {
@@ -148,4 +149,57 @@ class AdminAttendanceTest extends TestCase
         $this->deleteJson('/api/admin/attendance/overrides/anything')->assertStatus(419);
         $this->assertDatabaseCount('attendance_working_day_overrides', 0);
     }
+
+    public function test_admin_can_download_monthly_attendance_excel(): void
+{
+    DB::table('attendance_records')->insert([
+        'id' => 'excel-test',
+        'user_id' => 'one',
+        'attendance_date' => '2026-09-08',
+        'status' => 'present',
+        'check_in_at' => '2026-09-08 09:40:00',
+        'check_out_at' => '2026-09-08 18:30:00',
+        'is_late' => false,
+        'is_early_checkout' => false,
+        'worked_minutes' => 530,
+    ]);
+
+    $response = $this->get(
+        '/api/admin/attendance/export?month=9&year=2026'
+    );
+
+    $response->assertOk();
+    $response->assertDownload(
+        'Karya-Attendance-September-2026.xlsx'
+    );
+
+    $file = $response->baseResponse->getFile();
+
+    $workbook = IOFactory::load($file->getPathname());
+
+    $this->assertSame(
+        ['Attendance Details', 'Monthly Summary'],
+        $workbook->getSheetNames()
+    );
+
+    $details = $workbook->getSheetByName('Attendance Details');
+    $summary = $workbook->getSheetByName('Monthly Summary');
+
+    $this->assertNotNull($details);
+    $this->assertNotNull($summary);
+
+    $this->assertSame('Date', $details->getCell('A1')->getValue());
+    $this->assertSame('Employee', $details->getCell('C1')->getValue());
+    $this->assertSame('Status', $details->getCell('D1')->getValue());
+
+    $this->assertSame(
+        'Employee',
+        $summary->getCell('A1')->getValue()
+    );
+
+    $this->assertSame(
+        'Total Worked Time',
+        $summary->getCell('K1')->getValue()
+    );
+}
 }

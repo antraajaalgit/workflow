@@ -9,6 +9,7 @@ use App\Http\Controllers\AdminAttendanceController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\AdminLeaveController;
+use App\Http\Controllers\AdminAttendanceExportController;
 
 Route::prefix('api')->group(function () {
     Route::get('/admin/holidays', [\App\Http\Controllers\AdminHolidayController::class, 'index']);
@@ -16,6 +17,7 @@ Route::prefix('api')->group(function () {
     Route::put('/admin/holidays/{id}', [\App\Http\Controllers\AdminHolidayController::class, 'update']);
     Route::delete('/admin/holidays/{id}', [\App\Http\Controllers\AdminHolidayController::class, 'destroy']);
     Route::get('/admin/attendance', [AdminAttendanceController::class, 'index']);
+    Route::get('/admin/attendance/export', [AdminAttendanceExportController::class, 'download']);
     Route::post('/admin/attendance/overrides', [AdminAttendanceController::class, 'store']);
     Route::delete('/admin/attendance/overrides/{id}', [AdminAttendanceController::class, 'destroy']);
     Route::get('/attendance/today', [AttendanceController::class, 'today']);
