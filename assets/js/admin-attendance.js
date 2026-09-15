@@ -10,11 +10,32 @@
     return new Intl.DateTimeFormat('en-IN', {timeZone:timezone, hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true}).format(new Date(value));
   }
   function create({request, getUser}) {
-    let host=null, owner=null, generation=0, data=null, date='', employee='', notes='', busy=false, error='', message='';
+    let host=null, owner=null, generation=0, data=null, date='', employee='', notes='', exportMonth='', exportYear='', busy=false, error='', message='';
     const active = token => token===generation && getUser()?.role==='admin' && getUser()?.id===owner;
     function paint() {
       if (!host) return;
       const disabled=busy?' disabled':'';
+      const selectedExportMonth = exportMonth || (date ? String(Number(date.slice(5, 7))) : String(new Date().getMonth() + 1));
+const selectedExportYear = exportYear || (date ? date.slice(0, 4) : String(new Date().getFullYear()));
+
+const months = [
+  [1,'January'],
+  [2,'February'],
+  [3,'March'],
+  [4,'April'],
+  [5,'May'],
+  [6,'June'],
+  [7,'July'],
+  [8,'August'],
+  [9,'September'],
+  [10,'October'],
+  [11,'November'],
+  [12,'December']
+];
+
+const monthOptions = months.map(([value,label]) =>
+  `<option value="${value}"${String(value)===selectedExportMonth?' selected':''}>${label}</option>`
+).join('');
       const rows=(data?.rows||[]).map(row=>`<tr><th scope="row">${esc(row.name)}</th>
         <td>${esc(row.status==='holiday'?'Holiday – '+row.holiday_name:(labels[row.status]||row.status))}${row.approved_leave_type && row.status!==row.approved_leave_type+'_leave'?`<div class="small">Approved ${row.approved_leave_type==='paid'?'Paid':'Unpaid'} Leave</div>`:''}</td>
         <td>${esc(clock(row.check_in_at,data.timezone))}</td><td>${esc(clock(row.check_out_at,data.timezone))}</td>
@@ -25,18 +46,111 @@
         <td>${row.can_authorize_override?`<button type="button" class="btn small" data-overtime-create="${esc(row.user_id)}"${disabled}>Authorize overtime</button>`:''}
           ${row.can_revoke_override?`<button type="button" class="btn-ghost small" data-overtime-revoke="${esc(row.override.id)}"${disabled}>Revoke overtime</button>`:''}</td></tr>`).join('');
       host.innerHTML=`<div class="section-head"><div><h2>Team attendance</h2><p class="muted small">${esc(data?.timezone||'Asia/Kolkata')} · Review attendance and authorize weekly-off or holiday work.</p></div></div>
-        <form data-attendance-filters class="admin-attendance-filters"><label>Date<input name="date" type="date" value="${esc(date)}" required${disabled}></label>
-          <label>Team member<select name="employee"${disabled}><option value="">All team members</option>${(data?.employees||[]).map(user=>`<option value="${esc(user.id)}"${employee===user.id?' selected':''}>${esc(user.name)}</option>`).join('')}</select></label>
-          <button type="submit" class="btn"${disabled}>Apply filters / Refresh</button></form>
-        <label class="admin-overtime-note">Overtime note (optional)<input name="overtime-note" maxlength="2000" value="${esc(notes)}"${disabled}></label>
-        <p class="muted small">Overtime controls apply only to the employee in that row and the selected date. Revoked authorizations remain in the audit history.</p>
-        ${error?`<p class="attendance-error" role="alert">${esc(error)}</p>`:''}
-        <p role="status" aria-live="polite" class="attendance-feedback small">${esc(busy?'Loading attendance…':message)}</p>
-        <div class="admin-attendance-table"><table><caption class="muted small">Attendance for ${esc(data?.attendance_date||'selected date')}</caption>
-          <thead><tr><th>Employee</th><th>Status</th><th>Check In</th><th>Check Out</th><th>Late</th><th>Early checkout</th><th>Worked time</th><th>Schedule / Overtime</th><th>Actions</th></tr></thead>
-          <tbody>${rows||`<tr><td colspan="9">${busy?'Loading…':data?'No team members match this filter.':'Attendance unavailable. Use Refresh to retry.'}</td></tr>`}</tbody></table></div>`;
+
+  <form data-attendance-filters class="admin-attendance-filters">
+    <label>
+      Date
+      <input name="date" type="date" value="${esc(date)}" required${disabled}>
+    </label>
+
+    <label>
+      Team member
+      <select name="employee"${disabled}>
+        <option value="">All team members</option>
+        ${(data?.employees||[]).map(user=>`<option value="${esc(user.id)}"${employee===user.id?' selected':''}>${esc(user.name)}</option>`).join('')}
+      </select>
+    </label>
+
+    <button type="submit" class="btn"${disabled}>
+      Apply filters / Refresh
+    </button>
+  </form>
+
+  <form data-attendance-export class="admin-attendance-filters">
+    <label>
+      Export month
+      <select name="export_month"${disabled}>
+        ${monthOptions}
+      </select>
+    </label>
+
+    <label>
+      Export year
+      <input
+        name="export_year"
+        type="number"
+        min="2000"
+        max="2100"
+        value="${esc(selectedExportYear)}"
+        required
+        ${disabled}
+      >
+    </label>
+
+    <button type="submit" class="btn"${disabled}>
+      Download Excel
+    </button>
+  </form>
+
+  <label class="admin-overtime-note">
+    Overtime note (optional)
+    <input name="overtime-note" maxlength="2000" value="${esc(notes)}"${disabled}>
+  </label>
+
+  <p class="muted small">Overtime controls apply only to the employee in that row and the selected date. Revoked authorizations remain in the audit history.</p>
+
+  ${error?`<p class="attendance-error" role="alert">${esc(error)}</p>`:''}
+
+  <p role="status" aria-live="polite" class="attendance-feedback small">
+    ${esc(busy?'Loading attendance…':message)}
+  </p>
+
+  <div class="admin-attendance-table">
+    <table>
+      <caption class="muted small">Attendance for ${esc(data?.attendance_date||'selected date')}</caption>
+      <thead>
+        <tr>
+          <th>Employee</th>
+          <th>Status</th>
+          <th>Check In</th>
+          <th>Check Out</th>
+          <th>Late</th>
+          <th>Early checkout</th>
+          <th>Worked time</th>
+          <th>Schedule / Overtime</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows||`<tr><td colspan="9">${busy?'Loading…':data?'No team members match this filter.':'Attendance unavailable. Use Refresh to retry.'}</td></tr>`}
+      </tbody>
+    </table>
+  </div>`;
       host.setAttribute('aria-busy',String(busy));
-      host.onsubmit=event=>{event.preventDefault();if(busy)return;const fields=event.target.elements;filter(fields.date.value,fields.employee.value);};
+      host.onsubmit=event=>{
+  event.preventDefault();
+  if(busy)return;
+
+  const form=event.target;
+  const fields=form.elements;
+
+  if(form.matches('[data-attendance-export]')){
+    exportMonth=fields.export_month.value;
+    exportYear=fields.export_year.value;
+
+    const query=new URLSearchParams({
+      month:exportMonth,
+      year:exportYear
+    });
+
+    window.location.href='/api/admin/attendance/export?'+query.toString();
+    return;
+  }
+
+  if(form.matches('[data-attendance-filters]')){
+    filter(fields.date.value,fields.employee.value);
+  }
+};
       host.oninput=event=>{if(event.target.name==='overtime-note')notes=event.target.value;};
       host.onclick=event=>{
         const button=event.target.closest('[data-overtime-create], [data-overtime-revoke]');
@@ -81,7 +195,7 @@
         }
       }
     }
-    function reset(){generation++;if(host){host.innerHTML='';host.onclick=null;host.oninput=null;host.onsubmit=null;}host=null;owner=null;data=null;date='';employee='';notes='';busy=false;error='';message='';}
+    function reset(){generation++;if(host){host.innerHTML='';host.onclick=null;host.oninput=null;host.onsubmit=null;}host=null;owner=null;data=null;date='';employee='';notes='';exportMonth='';exportYear='';busy=false;error='';message='';}
     function mount(element){const user=getUser();if(!element||user?.role!=='admin'){reset();return;}if(owner!==user.id){reset();owner=user.id;}host=element;paint();return refresh();}
     return {mount,refresh,filter,change,reset,unmount(){if(host){host.onclick=null;host.oninput=null;host.onsubmit=null;}host=null;}};
   }
