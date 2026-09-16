@@ -31,6 +31,7 @@ use App\Mcp\Tools\DeleteTeamMemberTool;
 use App\Mcp\Tools\CreateProjectTool;
 
 use App\Mcp\Tools\ListAttendanceTool;
+use App\Mcp\Tools\DownloadMonthlyAttendanceExcelTool;
 use App\Mcp\Tools\AuthorizeOvertimeTool;
 use App\Mcp\Tools\RevokeOvertimeTool;
 use App\Mcp\Tools\ListLeaveRequestsTool;
@@ -52,6 +53,7 @@ class KaryaServer extends Server
         UpdateHolidayTool::class,
         DeleteHolidayTool::class,
         ListAttendanceTool::class,
+        DownloadMonthlyAttendanceExcelTool::class,
         AuthorizeOvertimeTool::class,
         RevokeOvertimeTool::class,
         ListLeaveRequestsTool::class,
