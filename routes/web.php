@@ -18,6 +18,8 @@ Route::prefix('api')->group(function () {
     Route::delete('/admin/holidays/{id}', [\App\Http\Controllers\AdminHolidayController::class, 'destroy']);
     Route::get('/admin/attendance', [AdminAttendanceController::class, 'index']);
     Route::get('/admin/attendance/export', [AdminAttendanceExportController::class, 'download']);
+    Route::get('/admin/attendance/downloads/{id}', \App\Http\Controllers\MonthlyAttendanceDownloadController::class)
+        ->whereUuid('id')->middleware('signed')->name('attendance.monthly-download');
     Route::post('/admin/attendance/overrides', [AdminAttendanceController::class, 'store']);
     Route::delete('/admin/attendance/overrides/{id}', [AdminAttendanceController::class, 'destroy']);
     Route::get('/attendance/today', [AttendanceController::class, 'today']);

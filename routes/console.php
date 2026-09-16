@@ -21,3 +21,6 @@ Schedule::command('nagare:generate-recurring-tasks')
 Schedule::command('tasks:purge-completed')
     ->dailyAt('03:00')
     ->withoutOverlapping();
+
+Schedule::call(fn () => app(\App\Services\MonthlyAttendanceDownload::class)->prune())
+    ->hourly()->name('attendance:prune-downloads')->withoutOverlapping();
