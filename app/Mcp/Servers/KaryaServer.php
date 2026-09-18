@@ -11,6 +11,7 @@ use Laravel\Mcp\Server\Attributes\Version;
 use App\Mcp\Tools\ListProjectsTool;
 use App\Mcp\Tools\ListTasksTool;
 use App\Mcp\Tools\ListTeamMembersTool;
+use App\Mcp\Tools\ListOverdueTeamTasksTool;
 use App\Mcp\Tools\AssignTaskTool;
 use App\Mcp\Tools\UpdateTaskStatusTool;
 use App\Mcp\Tools\UpdateTaskProgressTool;
@@ -62,6 +63,7 @@ class KaryaServer extends Server
         ListProjectsTool::class,
         ListTasksTool::class,
         ListTeamMembersTool::class,
+        ListOverdueTeamTasksTool::class,
         AssignTaskTool::class,
         UpdateTaskStatusTool::class,
         UpdateTaskProgressTool::class,

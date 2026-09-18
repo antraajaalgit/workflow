@@ -343,6 +343,14 @@ function render(){
 }
 
 /* ---------- DASHBOARD ---------- */
+function memberTasksCrossedDeadline(memberTasks, now=Date.now()){
+  const today=new Date(now).setHours(0,0,0,0);
+  return memberTasks.filter(task=>projectDueTime(task.dueDate)<today && task.status!=='done' && task.progress!=='completed');
+}
+function crossedDeadlineTaskRows(tasks){
+  return tasks.map(task=>`<div class="row-item"><div style="flex:1"><b>${esc(task.title)}</b></div><span class="muted small">Due ${new Date(task.dueDate).toLocaleDateString()}</span></div>`).join('')||'<div class="empty" style="padding:20px">No tasks crossed deadline</div>';
+}
+
 function viewDashboard(){
   const scope = andonScope();
   const active = scope.filter(t=>ACTIVE.includes(t.status) && t.progress!=='completed');
@@ -381,7 +389,8 @@ function viewDashboard(){
     </div>`).join('');
   const progressRows = team.map(u=>{
     const memberTasks=S().tasks.filter(t=>isTaskOwner(t,u.id));
-    return `<div class="row-item" data-member-task-details="${u.id}" role="button" tabindex="0" style="cursor:pointer"><div style="flex:1;min-width:150px">${avatar(u)} <b>${esc(u.name)}</b><div class="muted small">${memberTasks.length} task${memberTasks.length===1?'':'s'} · Click row for details</div></div><div class="chips" style="justify-content:flex-end">${TASK_PROGRESS_OPTIONS.map(([id,label])=>`<span class="chip" style="cursor:inherit">${label}: <b>${memberTasks.filter(t=>(t.progress||'just_started')===id).length}</b></span>`).join('')}</div></div>`;
+    const crossedTasks=memberTasksCrossedDeadline(memberTasks);
+    return `<div class="row-item team-progress-row" data-member-task-details="${u.id}" role="button" tabindex="0" style="cursor:pointer"><div class="team-progress-member">${avatar(u)} <b>${esc(u.name)}</b><div class="muted small">${memberTasks.length} task${memberTasks.length===1?'':'s'} · Click row for details</div></div><div class="team-progress-status">${TASK_PROGRESS_OPTIONS.map(([id,label])=>`<span class="chip" style="cursor:inherit">${label}: <b>${memberTasks.filter(t=>(t.progress||'just_started')===id).length}</b></span>`).join('')}<span class="chip" style="cursor:inherit">Tasks Crossed Deadline: <b>${crossedTasks.length}</b></span></div></div>`;
   }).join('');
   const ownProgressSummary=TASK_PROGRESS_OPTIONS.map(([id,label])=>`<span class="chip" style="cursor:default">${label}: <b>${scope.filter(t=>(t.progress||'just_started')===id).length}</b></span>`).join('');
   const ownProgressRows=scope.map(t=>`<div class="row-item" data-task="${t.id}" style="cursor:pointer"><div style="flex:1"><b>${esc(t.title)}</b><div class="muted small">${esc(projectById(t.projectId)?.name||'Standalone task')}</div></div><span class="status-pill">${taskProgressLabel(t.progress)}</span></div>`).join('');
@@ -415,7 +424,7 @@ function viewDashboard(){
       </div>`:`
       <div class="card"><div class="section-head"><h2>🚦 Andon — needs attention now</h2><button class="btn-ghost small" data-go="andon">View all →</button></div>${redRows}</div>
       <div class="card" style="margin-top:16px"><h3>Team workload (Heijunka)</h3>${workload || '<span class="muted small">No team members</span>'}</div>`}
-    ${session.role==='admin'?`<div class="card" style="margin-top:16px"><div class="section-head"><div><h3>Task progress by team member</h3><p class="muted small">Includes project tasks and standalone tasks.</p></div></div><div class="list">${progressRows||'<span class="muted">No team members</span>'}</div></div>`:''}
+    ${session.role==='admin'?`<div class="card" style="margin-top:16px"><div class="section-head"><div><h3>Task progress by team member</h3><p class="muted small">Includes project tasks and standalone tasks.</p></div></div><div class="list team-progress-list">${progressRows||'<span class="muted">No team members</span>'}</div></div>`:''}
     ${session.role==='team'?`<div class="card" style="margin-top:16px"><div class="section-head"><div><h3>My task progress</h3><p class="muted small">Your project and standalone tasks.</p></div><div class="chips">${ownProgressSummary}</div></div><div class="list">${ownProgressRows||'<div class="empty">No tasks assigned to you</div>'}</div></div>`:''}
     ${dashboardCalendar(scope)}
     <div class="card" style="margin-top:16px"><h3>Live activity (Gemba feed)</h3><div class="list">${feed||'<span class="muted">No activity yet</span>'}</div></div>
@@ -426,6 +435,7 @@ function openMemberTaskDetails(memberId){
   const member=userById(memberId);if(!member)return;
   const now=Date.now(),sevenDaysAgo=now-(7*24*60*60*1000);
   const memberTasks=S().tasks.filter(t=>isTaskOwner(t,memberId));
+  const crossedTasks=memberTasksCrossedDeadline(memberTasks,now);
   const isCompleted=t=>t.status==='done'||t.progress==='completed';
   const completed=memberTasks.filter(t=>isCompleted(t)&&(t.stageAt||t.createdAt||0)>=sevenDaysAgo).sort((a,b)=>(b.stageAt||b.createdAt||0)-(a.stageAt||a.createdAt||0));
   const pending=memberTasks.filter(t=>!isCompleted(t)).sort((a,b)=>(a.dueDate||Number.MAX_SAFE_INTEGER)-(b.dueDate||Number.MAX_SAFE_INTEGER));
@@ -433,7 +443,7 @@ function openMemberTaskDetails(memberId){
   const statusLabel=t=>isCompleted(t)?'Completed':({todo:'To do',in_progress:'In progress',review:'In review',blocked:'Blocked'}[t.status]||taskProgressLabel(t.progress));
   const taskRows=(tasks,empty)=>tasks.length?tasks.map(t=>`<button class="row-item" data-member-detail-task="${t.id}" style="width:100%;text-align:left;cursor:pointer"><div style="flex:1;min-width:0"><b>${esc(t.title)}</b><div class="muted small">${esc(projectById(t.projectId)?.name||'Standalone task')}</div></div><span class="status-pill">${esc(statusLabel(t))}</span><span class="muted small" style="min-width:112px;text-align:right">Due ${dateLabel(t.dueDate)}</span></button>`).join(''):`<div class="empty" style="padding:20px">${empty}</div>`;
   const modal=document.createElement('div');modal.className='modal-scrim';
-  modal.innerHTML=`<div class="modal project-modal"><div class="modal-head"><div><h2>${esc(member.name)} — task details</h2><p class="muted small">Recently completed work and all currently pending tasks.</p></div><button class="btn-ghost" data-close>✕</button></div><div class="modal-body"><h3 style="font-size:14px;margin-bottom:10px">Completed in the last 7 days (${completed.length})</h3><div class="list">${taskRows(completed,'No tasks completed in the last 7 days')}</div><div class="divider"></div><h3 style="font-size:14px;margin-bottom:10px">Pending tasks (${pending.length})</h3><div class="list">${taskRows(pending,'No pending tasks')}</div></div><div class="modal-foot"><button class="btn" data-close>Close</button></div></div>`;
+  modal.innerHTML=`<div class="modal project-modal"><div class="modal-head"><div><h2>${esc(member.name)} — task details</h2><p class="muted small">Recently completed work and all currently pending tasks.</p></div><button class="btn-ghost" data-close>✕</button></div><div class="modal-body"><h3 style="font-size:14px;margin-bottom:10px">Completed in the last 7 days (${completed.length})</h3><div class="list">${taskRows(completed,'No tasks completed in the last 7 days')}</div><div class="divider"></div><h3 style="font-size:14px;margin-bottom:10px">Pending tasks (${pending.length})</h3><div class="list">${taskRows(pending,'No pending tasks')}</div><div class="divider"></div><h3 style="font-size:14px;margin-bottom:10px">Tasks Crossed Deadline (${crossedTasks.length})</h3><div class="list">${taskRows(crossedTasks,'No tasks crossed deadline')}</div></div><div class="modal-foot"><button class="btn" data-close>Close</button></div></div>`;
   $('#modal-host').appendChild(modal);modal.querySelectorAll('[data-close]').forEach(button=>button.onclick=()=>modal.remove());modal.onclick=e=>{if(e.target===modal)modal.remove();};
   modal.querySelectorAll('[data-member-detail-task]').forEach(button=>button.onclick=()=>{modal.remove();openTask(button.dataset.memberDetailTask);});
 }

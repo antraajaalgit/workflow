@@ -347,6 +347,14 @@ function render(){
 }
 
 /* ---------- DASHBOARD ---------- */
+function memberTasksCrossedDeadline(memberTasks, now=Date.now()){
+  const today=new Date(now).setHours(0,0,0,0);
+  return memberTasks.filter(task=>projectDueTime(task.dueDate)<today && task.status!=='done' && task.progress!=='completed');
+}
+function crossedDeadlineTaskRows(tasks){
+  return tasks.map(task=>`<div class="row-item"><div style="flex:1"><b>${esc(task.title)}</b></div><span class="muted small">Due ${new Date(task.dueDate).toLocaleDateString()}</span></div>`).join('')||'<div class="empty" style="padding:20px">No tasks crossed deadline</div>';
+}
+
 function viewDashboard(){
   const scope = andonScope();
   const active = scope.filter(t=>ACTIVE.includes(t.status) && t.progress!=='completed');
@@ -384,8 +392,9 @@ function viewDashboard(){
       <div class="bar"><i style="width:${activeLoad(u.id)/maxLoad*100}%;background:${activeLoad(u.id)>=16?'var(--red)':activeLoad(u.id)>=8?'#f97316':'var(--green)'}"></i></div>
     </div>`).join('');
   const progressRows = team.map(u=>{
-    const memberTasks=S().tasks.filter(t=>t.ownerId===u.id);
-    return `<div class="row-item"><div style="flex:1;min-width:150px">${avatar(u)} <b>${esc(u.name)}</b><div class="muted small">${memberTasks.length} task${memberTasks.length===1?'':'s'}</div></div><div class="chips" style="justify-content:flex-end">${TASK_PROGRESS_OPTIONS.map(([id,label])=>`<span class="chip" style="cursor:default">${label}: <b>${memberTasks.filter(t=>(t.progress||'just_started')===id).length}</b></span>`).join('')}</div></div>`;
+    const memberTasks=S().tasks.filter(t=>Array.isArray(t.ownerIds)&&t.ownerIds.length?t.ownerIds.includes(u.id):t.ownerId===u.id);
+    const crossedTasks=memberTasksCrossedDeadline(memberTasks);
+    return `<div class="row-item team-progress-row"><div class="team-progress-member">${avatar(u)} <b>${esc(u.name)}</b><div class="muted small">${memberTasks.length} task${memberTasks.length===1?'':'s'}</div></div><div class="team-progress-status">${TASK_PROGRESS_OPTIONS.map(([id,label])=>`<span class="chip" style="cursor:default">${label}: <b>${memberTasks.filter(t=>(t.progress||'just_started')===id).length}</b></span>`).join('')}<details><summary class="chip">Tasks Crossed Deadline: <b>${crossedTasks.length}</b></summary><div class="list">${crossedDeadlineTaskRows(crossedTasks)}</div></details></div></div>`;
   }).join('');
   const ownProgressSummary=TASK_PROGRESS_OPTIONS.map(([id,label])=>`<span class="chip" style="cursor:default">${label}: <b>${scope.filter(t=>(t.progress||'just_started')===id).length}</b></span>`).join('');
   const ownProgressRows=scope.map(t=>`<div class="row-item" data-task="${t.id}" style="cursor:pointer"><div style="flex:1"><b>${esc(t.title)}</b><div class="muted small">${esc(projectById(t.projectId)?.name||'Standalone task')}</div></div><span class="status-pill">${taskProgressLabel(t.progress)}</span></div>`).join('');
@@ -419,7 +428,7 @@ function viewDashboard(){
       </div>`:`
       <div class="card"><div class="section-head"><h2>🚦 Andon — needs attention now</h2><button class="btn-ghost small" data-go="andon">View all →</button></div>${redRows}</div>
       <div class="card" style="margin-top:16px"><h3>Team workload (Heijunka)</h3>${workload || '<span class="muted small">No team members</span>'}</div>`}
-    ${session.role==='admin'?`<div class="card" style="margin-top:16px"><div class="section-head"><div><h3>Task progress by team member</h3><p class="muted small">Includes project tasks and standalone tasks.</p></div></div><div class="list">${progressRows||'<span class="muted">No team members</span>'}</div></div>`:''}
+    ${session.role==='admin'?`<div class="card" style="margin-top:16px"><div class="section-head"><div><h3>Task progress by team member</h3><p class="muted small">Includes project tasks and standalone tasks.</p></div></div><div class="list team-progress-list">${progressRows||'<span class="muted">No team members</span>'}</div></div>`:''}
     ${session.role==='team'?`<div class="card" style="margin-top:16px"><div class="section-head"><div><h3>My task progress</h3><p class="muted small">Your project and standalone tasks.</p></div><div class="chips">${ownProgressSummary}</div></div><div class="list">${ownProgressRows||'<div class="empty">No tasks assigned to you</div>'}</div></div>`:''}
     <div class="card" style="margin-top:16px"><h3>Live activity (Gemba feed)</h3><div class="list">${feed||'<span class="muted">No activity yet</span>'}</div></div>
   `;
