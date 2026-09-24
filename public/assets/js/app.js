@@ -22,7 +22,8 @@ let googleCalendarRange = null;
 const esc = (s='') => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const userById = id => S().users.find(u => u.id === id);
 const assignableStaff = () => S().users.filter(u => u.role === 'team' || (u.role === 'admin' && u.email));
-const assigneeLabel = u => `${esc(u.name)} · ${u.role === 'admin' ? 'Admin' : esc(u.dept || 'Team')}`;
+const ADMIN_ASSIGNEE_NAMES = {u_admin_agam:'Agam Bahri',u_admin_sales:'Jagmeet Bahri',u_admin_ceo:'Deepika Bahri'};
+const assigneeLabel = u => esc(u.role==='admin'?(ADMIN_ASSIGNEE_NAMES[u.id]||u.name):u.name);
 const clientById = id => S().clients.find(c => c.id === id);
 const projectById = id => (S().projects || []).find(p => p.id === id);
 const taskOwnerIds = task => task.ownerIds?.length ? task.ownerIds : (task.ownerId ? [task.ownerId] : []);
@@ -247,6 +248,7 @@ function renderWho(){
 const NAV = {
   admin: [
     {id:'dashboard', ic:'📊', label:'Dashboard'},
+    {id:'my-tasks', ic:'👤', label:'My Tasks'},
     {id:'projects', ic:'📌', label:'Projects'},
     {id:'andon', ic:'🚦', label:'Andon Board'},
     {id:'kanban', ic:'🗂️', label:'Kanban'},
@@ -291,7 +293,7 @@ function go(r, param=null){ route=r; routeParam=param; buildNav(); render(); }
 /* ============================================================
    RENDER ROUTER
 ============================================================ */
-const TITLES = {'admin-holidays':'Holidays','admin-attendance':'Team Attendance','admin-leave':'Leave Requests',dashboard:'Dashboard', projects:'Projects', andon:'Andon Board', kanban:'Kanban Flow', clients:'Client Folders', inbox:'Inbox', recurring:'Recurring Tasks', tasks:'Tasks', departments:'Departments', team:'Team & Workload', settings:'Settings', 'my-requests':'My Requests', 'new-request':'New Request', messages:'Messages', 'client-folder':'Client Folder'};
+const TITLES = {'admin-holidays':'Holidays','admin-attendance':'Team Attendance','admin-leave':'Leave Requests',dashboard:'Dashboard', 'my-tasks':'My Tasks', projects:'Projects', andon:'Andon Board', kanban:'Kanban Flow', clients:'Client Folders', inbox:'Inbox', recurring:'Recurring Tasks', tasks:'Tasks', departments:'Departments', team:'Team & Workload', settings:'Settings', 'my-requests':'My Requests', 'new-request':'New Request', messages:'Messages', 'client-folder':'Client Folder'};
 function render(){
   const pageTitle = $('#page-title');
   const v = $('#view');
@@ -302,7 +304,7 @@ function render(){
     'admin-attendance': () => session.role === 'admin' ? '<section id="admin-attendance" class="card"></section>' : '<p>Admin access required.</p>',
     dashboard: viewDashboard, projects: viewProjects, andon: viewAndon, kanban: viewKanban,
     clients: viewClients, 'client-folder': viewClientFolder, inbox: viewInbox,
-    recurring: viewRecurring, tasks: viewTasks, departments: viewDepartments, team: viewTeam, settings: viewSettings,
+    recurring: viewRecurring, tasks: viewTasks, 'my-tasks': () => session.role==='admin'?viewTasks():'<p>Admin access required.</p>', departments: viewDepartments, team: viewTeam, settings: viewSettings,
     'my-requests': viewMyRequests, 'new-request': viewNewRequest, messages: viewMessages,
     'admin-leave': () =>
   session.role === 'admin'
@@ -1302,7 +1304,8 @@ async function deleteTask(taskId,modal=null){
    TASKS
 ============================================================ */
 function viewTasks(){
-  const visible=session.role==='team'?S().tasks.filter(t=>isTaskOwner(t,session.id)):S().tasks;
+  const adminMyTasks=session.role==='admin'&&typeof route!=='undefined'&&route==='my-tasks';
+  const visible=session.role==='team'||adminMyTasks?S().tasks.filter(t=>isTaskOwner(t,session.id)):S().tasks;
   const filtered=visible.filter(t=>tasksProjectFilter==='all'||(tasksProjectFilter==='standalone'?!t.projectId:'project:'+t.projectId===tasksProjectFilter));
   const all=tasksByProjectNameWithCompletedLast(filtered),pageSize=12,totalPages=Math.max(1,Math.ceil(all.length/pageSize));tasksPage=Math.min(Math.max(1,tasksPage),totalPages);
   const cards=all.slice((tasksPage-1)*pageSize,tasksPage*pageSize).map(t=>{const client=clientById(t.clientId),project=projectById(t.projectId),owners=taskOwners(t),completed=t.status==='done'||t.progress==='completed';return `<article class="task-card ${completed?'task-row-completed':''}" data-task="${t.id}">
@@ -1315,7 +1318,7 @@ function viewTasks(){
   </article>`;}).join('');
   const pagination=totalPages>1?`<div class="section-head" style="margin-top:14px"><button class="btn-ghost small" data-tasks-page="${tasksPage-1}" ${tasksPage===1?'disabled':''}>← Previous</button><span class="muted small">Page ${tasksPage} of ${totalPages} · ${all.length} tasks</span><button class="btn-ghost small" data-tasks-page="${tasksPage+1}" ${tasksPage===totalPages?'disabled':''}>Next →</button></div>`:'';
   const projectFilter=`<div class="field"><label for="tasks-project-filter">Project</label><select id="tasks-project-filter"><option value="all" ${tasksProjectFilter==='all'?'selected':''}>All Projects</option><option value="standalone" ${tasksProjectFilter==='standalone'?'selected':''}>Standalone Tasks</option>${projectsByName(S().projects||[]).map(p=>`<option value="project:${esc(p.id)}" ${tasksProjectFilter==='project:'+p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`;
-  return `${projectFilter}<div class="section-head"><p class="muted">${session.role==='team'?'View and complete tasks assigned to you.':'Create and manage individual tasks across clients and projects.'}</p><button class="btn" ${session.role==='team'?'data-add-team-task':'data-new-task'}>+ New task</button></div><div class="task-card-grid">${cards||'<div class="empty"><div class="e-ic">✅</div>No tasks yet</div>'}</div>${pagination}`;
+  return `${projectFilter}<div class="section-head"><p class="muted">${session.role==='team'||adminMyTasks?'View, manage, and complete tasks assigned to you.':'Create and manage individual tasks across clients and projects.'}</p><button class="btn" ${session.role==='team'?'data-add-team-task':'data-new-task'}>+ New task</button></div><div class="task-card-grid">${cards||`<div class="empty"><div class="e-ic">✅</div>${adminMyTasks?'No tasks assigned to you':'No tasks yet'}</div>`}</div>${pagination}`;
 }
 
 async function completeTask(taskId){
