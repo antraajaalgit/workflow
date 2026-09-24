@@ -157,6 +157,8 @@ h1,h2,h3{font-weight:650;letter-spacing:-.01em}
 .kcard .kc-top{display:flex;align-items:center;gap:8px;margin-bottom:7px}
 .kcard .dep{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 7px;border-radius:6px}
 .kcard b{font-size:13px;display:block;margin-bottom:6px}
+.kcard .kc-project{display:flex;align-items:center;gap:5px;min-width:0;color:var(--accent);font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kcard .kc-project span{flex:none;font-size:10px}
 .kcard .kc-foot{display:flex;align-items:center;justify-content:space-between;margin-top:9px}
 .kcard .kc-foot .avatar{width:24px;height:24px;font-size:10px}
 .prio{font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px}
@@ -216,8 +218,14 @@ h1,h2,h3{font-weight:650;letter-spacing:-.01em}
 .btn-delete-client{color:var(--red)}
 
 /* Projects */
+.project-search{position:relative;max-width:440px;margin-bottom:18px}
+.project-search>span{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:20px;pointer-events:none}
+.project-search input{width:100%;padding:12px 42px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);outline:none;transition:.15s}
+.project-search input:focus{border-color:var(--accent2);box-shadow:0 0 0 3px rgba(201,162,95,.14)}
+.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 .project-card{position:relative;min-height:260px;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px;transition:.18s;display:flex;flex-direction:column}
 .project-card:hover{border-color:var(--accent2);transform:translateY(-2px);box-shadow:var(--shadow)}
+.project-card:focus-visible{outline:3px solid rgba(201,162,95,.35);outline-offset:2px}
 .project-card-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:17px}
 .project-icon{width:42px;height:42px;border-radius:12px;background:var(--accent-soft);display:grid;place-items:center;font-size:19px}
 .project-actions{position:relative}
@@ -264,6 +272,18 @@ h1,h2,h3{font-weight:650;letter-spacing:-.01em}
 .attachment-upload input{display:none}
 .attachment-upload span{font-size:13px;font-weight:600}
 .project-task-attachments .attachment-list{margin-top:9px}
+.project-task-recurrence{margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
+.recurring-task-option{display:flex!important;align-items:center;gap:10px;cursor:pointer;margin-bottom:0!important}
+.recurring-task-option input{width:18px!important;height:18px;accent-color:var(--accent);flex:none}
+.recurring-task-option span{display:flex;flex-direction:column}.recurring-task-option b{font-size:13px}.recurring-task-option small{color:var(--muted);font-size:11px;font-weight:400;margin-top:2px}
+.project-task-recurrence>[data-pt-frequency-field]{margin:14px 0 0 28px;max-width:260px}
+.project-detail-modal{width:min(940px,100%)}
+.project-detail-summary{padding:18px;border:1px solid var(--line);border-radius:14px;background:var(--bg)}
+.project-detail-summary>p{color:var(--muted);font-size:13px}
+.project-detail-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}.project-detail-stats>div{padding:12px;border-radius:10px;background:var(--panel);text-align:center}.project-detail-stats b,.project-detail-stats span{display:block}.project-detail-stats b{font-size:20px}.project-detail-stats span{font-size:11px;color:var(--muted)}
+.project-detail-section{margin-top:22px}.project-detail-section>h3{font-size:15px;margin-bottom:12px}
+.project-detail-task{padding:14px;border:1px solid var(--line);border-radius:12px;margin-bottom:10px}.project-detail-task>button{width:100%;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;text-align:left}.project-detail-task>button>span:first-child{min-width:0}.project-detail-task>button b,.project-detail-task>button small{display:block}.project-detail-task>button small{color:var(--muted);font-size:11px;margin-top:3px}.project-detail-task>p{font-size:12px;color:var(--muted);margin-top:10px}.project-detail-task-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.project-detail-task-meta span{font-size:10px;padding:4px 8px;border-radius:7px;background:var(--bg);color:var(--muted)}
+.project-chat-thread{padding:16px;border:1px solid var(--line);border-radius:12px;margin-bottom:12px}.project-chat-thread h4{font-size:13px;margin-bottom:14px}.project-chat-thread .chat{max-width:none}
 
 /* Chat / conversation */
 .chat{display:flex;flex-direction:column;gap:12px;max-width:760px}

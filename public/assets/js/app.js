@@ -39,6 +39,9 @@ const tasksByProjectName = tasks => [...tasks].sort((a,b)=>{
   if(!aProject&&bProject)return 1;
   return (aProject&&bProject?compareNames(aProject.name,bProject.name):0)||compareNames(a.title,b.title);
 });
+const tasksByProjectNameWithCompletedLast = tasks => tasksByProjectName(tasks).sort((a,b)=>
+  Number(a.status==='done'||a.progress==='completed')-Number(b.status==='done'||b.progress==='completed')
+);
 const departments = () => S().departments || [];
 const departmentColor = name => {
   const color = departments().find(d=>d.name===name)?.color || DEPT_COLOR[name]?.fg || '#7a5c3e';
@@ -491,7 +494,7 @@ function viewProjects(){
     const c=clientById(p.clientId); const tasks=S().tasks.filter(t=>t.projectId===p.id);
     const complete=tasks.filter(t=>t.status==='done').length;
     const progress=tasks.length?Math.round(complete/tasks.length*100):0;
-    return `<div class="project-card">
+    return `<div class="project-card" data-project-card data-project-name="${esc(p.name)}" data-view-project="${p.id}" role="button" tabindex="0" aria-label="View project ${esc(p.name)}">
       <div class="project-card-head">
         <div class="project-icon">📌</div>
         <div class="project-actions">
@@ -510,7 +513,17 @@ function viewProjects(){
     </div>`;
   }).join('');
   return `<div class="section-head"><p class="muted">Create a project and assign every task to a team member or admin.</p><button class="btn" data-add-project>+ Add project</button></div>
-    <div class="folder-grid">${cards||'<div class="empty"><div class="e-ic">📌</div>No projects yet</div>'}</div>`;
+    ${projects.length?`<div class="project-search"><span aria-hidden="true">⌕</span><label class="sr-only" for="project-search">Search projects by name</label><input id="project-search" type="search" placeholder="Search projects by name…" autocomplete="off"></div>`:''}
+    <div class="folder-grid" data-project-grid>${cards||'<div class="empty"><div class="e-ic">📌</div>No projects yet</div>'}</div>
+    ${projects.length?'<div class="empty hidden" data-project-search-empty><div class="e-ic">🔎</div>No projects match your search</div>':''}`;
+}
+
+function filterProjectCards(query, cards, emptyState){
+  const search=String(query||'').trim().toLocaleLowerCase();
+  let matches=0;
+  cards.forEach(card=>{const visible=card.dataset.projectName.toLocaleLowerCase().includes(search);card.classList.toggle('hidden',!visible);if(visible)matches++;});
+  if(emptyState)emptyState.classList.toggle('hidden',matches!==0);
+  return matches;
 }
 
 // Project grids keep their own display order without changing shared task state.
@@ -548,6 +561,7 @@ function projectTaskRow(index, task=null){
     <div class="field"><label>Department <span class="req">*</span></label><select data-pt-dept><option value="">Select department</option>${departmentOptions}</select></div>
     <div class="field"><label>Description</label><textarea data-pt-desc rows="2" placeholder="What needs to be done?">${esc(task?.desc||'')}</textarea></div>
     <div class="field project-task-attachments" style="margin-bottom:0"><label>Attachments</label><label class="attachment-upload"><input type="file" data-pt-files multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"><span>📎 Choose images, PDFs or documents</span></label><div class="hint">Up to 5 MB total per task.</div><div data-pt-file-list class="attachment-list"></div></div>
+    <div class="project-task-recurrence"><label class="recurring-task-option"><input type="checkbox" data-pt-recurring ${task?.recurring?'checked':''}><span><b>Recurring Task</b><small>Add this task to Recurring Tasks.</small></span></label><div class="field ${task?.recurring?'':'hidden'}" data-pt-frequency-field><label>Repeat</label><select data-pt-frequency><option value="daily" ${task?.recurring==='daily'?'selected':''}>Daily</option><option value="alternate_days" ${task?.recurring==='alternate_days'?'selected':''}>Alternate days</option><option value="weekly" ${!task?.recurring||task?.recurring==='weekly'?'selected':''}>Weekly</option><option value="monthly" ${task?.recurring==='monthly'?'selected':''}>Monthly</option></select></div></div>
   </div>`;
 }
 
@@ -561,6 +575,8 @@ function bindProjectTaskFiles(list){
   $$('[data-project-task]',list).forEach(row=>{
     if(!row._attachments){const existing=row.dataset.taskId?S().tasks.find(t=>t.id===row.dataset.taskId):null;row._attachments=[...(existing?.attachments||[])];row._reading=0;}
     renderProjectTaskFiles(row);
+    const recurring=$('[data-pt-recurring]',row),frequencyField=$('[data-pt-frequency-field]',row);
+    recurring.onchange=()=>frequencyField.classList.toggle('hidden',!recurring.checked);
     const input=$('[data-pt-files]',row);input.onchange=()=>{
       let total=row._attachments.reduce((sum,a)=>sum+(a.size||0),0);
       [...input.files].forEach(file=>{
@@ -605,11 +621,23 @@ function openProjectForm(projectId=null){
     const clientId=$('#project-client',modal).value||null;
     const retainedIds=rows.map(row=>row.dataset.taskId).filter(Boolean);
     const removedIds=projectTasks.filter(t=>!retainedIds.includes(t.id)).map(t=>t.id);
-    const tasks=rows.map(row=>{const ownerIds=selectedValues($('[data-pt-owner]',row));const dueInput=$('[data-pt-due]',row).value;return {...(row.dataset.taskId?{id:row.dataset.taskId}:{}),...Store.taskPayload({title:$('[data-pt-title]',row).value.trim(),desc:$('[data-pt-desc]',row).value.trim(),dept:$('[data-pt-dept]',row).value,ownerIds,priority:$('[data-pt-priority]',row).value,progress:$('[data-pt-progress]',row).value,dueDate:dueInput?new Date(dueInput).getTime():null,attachments:row._attachments||[]})};});
+    const tasks=rows.map(row=>{const ownerIds=selectedValues($('[data-pt-owner]',row));const dueInput=$('[data-pt-due]',row).value;return {...(row.dataset.taskId?{id:row.dataset.taskId}:{}),...Store.taskPayload({title:$('[data-pt-title]',row).value.trim(),desc:$('[data-pt-desc]',row).value.trim(),dept:$('[data-pt-dept]',row).value,ownerIds,priority:$('[data-pt-priority]',row).value,progress:$('[data-pt-progress]',row).value,dueDate:dueInput?new Date(dueInput).getTime():null,attachments:row._attachments||[],recurring:$('[data-pt-recurring]',row).checked?$('[data-pt-frequency]',row).value:null})};});
     try{const result=await Store.saveProject(project?.id,{name,client_id:clientId,description:$('#project-desc',modal).value.trim(),tasks,delete_ids:removedIds,_revision:formRevision});taskWriteWarnings(result);close();go('projects');toast(result.assignmentMailFailures?.length?'✅ Saved, but an assignment email could not be sent':editing?'✅ Project updated':'✅ Project and tasks created — assignment email sent');}catch(error){toast(error.message);}
 
   };
   guardTaskButton($('#save-project',modal));
+}
+
+function openProjectDetails(projectId){
+  const project=projectById(projectId);if(!project)return;
+  const client=clientById(project.clientId),tasks=projectTasksByDueDate(S().tasks.filter(task=>task.projectId===project.id));
+  const completed=tasks.filter(task=>task.status==='done'||task.progress==='completed').length;
+  const taskRows=tasks.map(task=>{const owners=taskOwners(task),messages=S().messages.filter(message=>message.taskId===task.id);return `<section class="project-detail-task"><button type="button" data-project-detail-task="${task.id}"><span><b>${esc(task.title)}</b><small>${esc(task.dept||'General')} · ${owners.length?esc(owners.map(owner=>owner.name).join(', ')):'Unassigned'} · ${task.dueDate?'Due '+new Date(task.dueDate).toLocaleDateString():'No due date'}</small></span><span class="status-pill st-${task.status}">${esc(task.status||'todo').replace('_',' ')}</span></button><p>${esc(task.desc||'No task description')}</p><div class="project-detail-task-meta"><span>Progress: ${taskProgressLabel(task.progress)}</span><span>Priority: ${esc(task.priority||'med')}</span>${task.recurring?`<span>Repeats: ${esc(task.recurring.replaceAll('_',' '))}</span>`:''}<span>${messages.length} chat message${messages.length===1?'':'s'}</span></div>${renderTaskAttachments(task.attachments)}</section>`;}).join('');
+  const chats=tasks.map(task=>{const messages=S().messages.filter(message=>message.taskId===task.id).sort((a,b)=>a.at-b.at);return messages.length?`<section class="project-chat-thread"><h4>💬 ${esc(task.title)}</h4>${renderChat(messages)}</section>`:'';}).join('');
+  const modal=document.createElement('div');modal.className='modal-scrim';
+  modal.innerHTML=`<div class="modal project-detail-modal"><div class="modal-head"><div><h2>${esc(project.name)}</h2><p class="muted small">${client?esc(client.company):'No client linked'} · ${esc(project.status||'active')}</p></div><button class="btn-ghost" data-close>✕</button></div><div class="modal-body"><section class="project-detail-summary"><p>${esc(project.desc||'No project description')}</p><div class="project-detail-stats"><div><b>${tasks.length}</b><span>Tasks</span></div><div><b>${completed}</b><span>Completed</span></div><div><b>${tasks.length-completed}</b><span>Open</span></div></div></section><section class="project-detail-section"><h3>Task list</h3>${taskRows||'<div class="empty">No tasks in this project</div>'}</section><section class="project-detail-section"><h3>Project chats</h3>${chats||'<div class="empty"><div class="e-ic">💬</div>No project task chats yet</div>'}</section></div><div class="modal-foot"><button class="btn" data-close>Close</button></div></div>`;
+  $('#modal-host').appendChild(modal);const close=()=>modal.remove();modal.querySelectorAll('[data-close]').forEach(button=>button.onclick=close);modal.onclick=event=>{if(event.target===modal)close();};
+  $$('[data-project-detail-task]',modal).forEach(button=>button.onclick=()=>{close();openTask(button.dataset.projectDetailTask);});
 }
 
 async function deleteProject(projectId){
@@ -663,6 +691,7 @@ const COLS = [
 const WIP = {in_progress:4, review:3};
 function kcard(t){
   const owners = taskOwners(t);
+  const project = projectById(t.projectId);
   const dc = departmentColor(t.dept);
   const lvl = andonLevel(t);
   return `<div class="kcard" data-task="${t.id}">
@@ -672,6 +701,7 @@ function kcard(t){
       ${t.recurring?`<span title="repeats ${t.recurring.replaceAll('_',' ')}">🔁</span>`:''}
     </div>
     <b>${esc(t.title)}</b>
+    <div class="kc-project" title="${project?'Project: '+esc(project.name):'No project'}"><span aria-hidden="true">📌</span>${project?esc(project.name):'Standalone task'}</div>
     <div class="kc-foot">
       ${owners.length?owners.map(owner=>avatar(owner)).join(''):'<span class="muted small">Unassigned</span>'}
       <span class="prio ${t.priority}">${t.priority}</span>
@@ -1274,7 +1304,7 @@ async function deleteTask(taskId,modal=null){
 function viewTasks(){
   const visible=session.role==='team'?S().tasks.filter(t=>isTaskOwner(t,session.id)):S().tasks;
   const filtered=visible.filter(t=>tasksProjectFilter==='all'||(tasksProjectFilter==='standalone'?!t.projectId:'project:'+t.projectId===tasksProjectFilter));
-  const all=tasksByProjectName(filtered),pageSize=12,totalPages=Math.max(1,Math.ceil(all.length/pageSize));tasksPage=Math.min(Math.max(1,tasksPage),totalPages);
+  const all=tasksByProjectNameWithCompletedLast(filtered),pageSize=12,totalPages=Math.max(1,Math.ceil(all.length/pageSize));tasksPage=Math.min(Math.max(1,tasksPage),totalPages);
   const cards=all.slice((tasksPage-1)*pageSize,tasksPage*pageSize).map(t=>{const client=clientById(t.clientId),project=projectById(t.projectId),owners=taskOwners(t),completed=t.status==='done'||t.progress==='completed';return `<article class="task-card ${completed?'task-row-completed':''}" data-task="${t.id}">
     <div class="task-card-head"><span class="status-pill">${taskProgressLabel(t.progress)}</span><div class="project-actions"><button class="project-menu-btn" data-task-menu="${t.id}" aria-label="Task actions" aria-expanded="false">⋮</button><div class="project-menu hidden" data-task-menu-popup="${t.id}">${completed?'<button disabled><span>✓</span>Completed</button>':`<button data-complete-task="${t.id}"><span>✓</span>Mark completed</button>`}<button data-edit-task="${t.id}"><span>✏️</span>Edit task</button><button class="danger" data-delete-task="${t.id}"><span>🗑️</span>Delete task</button></div></div></div>
     ${client?`<div class="project-client">${esc(client.company)}</div>`:''}<h3>${esc(t.title)}</h3>
@@ -1365,6 +1395,8 @@ function bindView(){
   $$('[data-delete-client]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();deleteClient(btn.dataset.deleteClient);});
   const att=$('[data-add-team-task]');if(att)att.onclick=openTeamTaskForm;
   const ap=$('[data-add-project]'); if(ap) ap.onclick=()=>openProjectForm();
+  const projectSearch=$('#project-search');if(projectSearch)projectSearch.oninput=()=>filterProjectCards(projectSearch.value,$$('[data-project-card]'),$('[data-project-search-empty]'));
+  $$('[data-view-project]').forEach(card=>{card.onclick=event=>{if(event.target.closest('.project-actions'))return;openProjectDetails(card.dataset.viewProject);};card.onkeydown=event=>{if((event.key==='Enter'||event.key===' ')&&!event.target.closest('.project-actions')){event.preventDefault();openProjectDetails(card.dataset.viewProject);}};});
   $$('[data-project-menu]').forEach(btn=>btn.onclick=e=>{
     e.stopPropagation(); const popup=$(`[data-project-menu-popup="${btn.dataset.projectMenu}"]`);
     $$('.project-menu').forEach(menu=>{if(menu!==popup)menu.classList.add('hidden');});
