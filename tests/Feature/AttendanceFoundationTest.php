@@ -206,6 +206,21 @@ class AttendanceFoundationTest extends TestCase
         $this->assertSame(12, $this->leave->balance('two', 'two', 2026)['paid_remaining']);
     }
 
+    public function test_admin_listing_includes_each_employees_current_paid_leave_balance(): void
+    {
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-10-08T00:00:00+05:30'));
+        $this->approved('2026-09-01', '2026-09-08');
+        $pending = $this->leave->submit('one', '2026-10-12', '2026-10-12', 'Appointment');
+
+        $listing = $this->leave->adminListing('admin', 'pending');
+
+        $this->assertCount(1, $listing);
+        $this->assertSame($pending->id, $listing[0]['id']);
+        $this->assertSame(2026, $listing[0]['paid_leave_year']);
+        $this->assertSame(12, $listing[0]['paid_leave_entitlement']);
+        $this->assertSame(5, $listing[0]['paid_leave_remaining']);
+    }
+
     public function test_leave_ranges_exclude_only_normal_weekly_offs(): void
     {
         $this->assertSame(['2026-09-04', '2026-09-05', '2026-09-07'], $this->policy->qualifyingDates('2026-09-04', '2026-09-07'));

@@ -81,9 +81,24 @@ public function adminListing(string $actorId, ?string $status = null): array
         $query->where('leave.status', $status);
     }
 
+    $year = $this->policy->now()->year;
+    $balances = [];
+
     return $query
         ->get()
-        ->map(fn ($request) => (array) $request)
+        ->map(function ($request) use ($actorId, $year, &$balances) {
+            $balances[$request->user_id] ??= $this->balance(
+                $actorId,
+                $request->user_id,
+                $year
+            );
+
+            return (array) $request + [
+                'paid_leave_year' => $year,
+                'paid_leave_entitlement' => $balances[$request->user_id]['entitlement'],
+                'paid_leave_remaining' => $balances[$request->user_id]['paid_remaining'],
+            ];
+        })
         ->all();
 }
 

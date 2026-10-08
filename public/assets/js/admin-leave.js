@@ -45,6 +45,19 @@
       }[value] || value || 'Unknown';
     }
 
+    function paidLeftLabel(item) {
+      if (
+        item.paid_leave_remaining === null ||
+        item.paid_leave_remaining === undefined ||
+        item.paid_leave_entitlement === null ||
+        item.paid_leave_entitlement === undefined
+      ) {
+        return '—';
+      }
+
+      return `${item.paid_leave_remaining} / ${item.paid_leave_entitlement}`;
+    }
+
     function row(item) {
       const pending = item.status === 'pending';
       const busy = busyId === item.id;
@@ -68,6 +81,7 @@
 
           <td>${escape(statusLabel(item.status))}</td>
           <td>${escape(item.paid_leave_days ?? 0)}</td>
+          <td>${escape(paidLeftLabel(item))}</td>
           <td>${escape(item.unpaid_leave_days ?? 0)}</td>
 
           <td style="min-width:220px">
@@ -193,6 +207,7 @@
                 <th>Reason</th>
                 <th>Status</th>
                 <th>Paid</th>
+                <th>Paid Left</th>
                 <th>Unpaid</th>
                 <th>Review</th>
               </tr>
@@ -203,7 +218,7 @@
                 rows ||
                 `
                   <tr>
-                    <td colspan="9">
+                    <td colspan="10">
                       ${loading ? 'Loading…' : 'No leave requests found.'}
                     </td>
                   </tr>
