@@ -16,7 +16,10 @@ for(const file of ['assets/js/app.js','public/assets/js/app.js']){
  test(file+': link survives login and opens only after authentication',()=>{
   const {ctx,opened}=setup('?task=t_review',null);ctx.openRequestedTask();assert.deepEqual(opened,[]);ctx.session={id:'admin'};ctx.openRequestedTask();assert.deepEqual(opened,['t_review']);
   const login=source.slice(source.indexOf('async function signIn'),source.indexOf('async function signOut'));assert.match(login,/render\(\); openRequestedTask\(\)/);
-  if(file.startsWith('public/'))assert.match(source.slice(source.indexOf('async function boot')),/await Store.load\(\);.*openRequestedTask\(\)/);
+  if(file.startsWith('public/')){
+   const initialize=source.slice(source.indexOf('async function initializeAuthenticatedApp'),source.indexOf('async function retrySessionRecovery'));
+   assert.ok(initialize.indexOf('await Store.load()')<initialize.indexOf('openRequestedTask()'));
+  }
  });
  for(const query of ['?task=','?task=../bad','?task='+ 'x'.repeat(41),'?task=t_review&task=other','?task=%3Cscript%3E'])test(file+': rejects '+query,()=>{
   const {ctx,opened,messages}=setup(query);ctx.openRequestedTask();assert.deepEqual(opened,[]);assert.deepEqual(messages,['This task link is invalid.']);

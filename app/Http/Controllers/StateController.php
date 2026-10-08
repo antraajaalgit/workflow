@@ -22,8 +22,22 @@ class StateController extends Controller
 {
     public function show(Request $request): JsonResponse
     {
-        $this->requireUser($request);
-        return app(StateConcurrency::class)->run(fn () => response()->json($this->state()));
+        $user = $this->requireUser($request);
+        $startedAt = hrtime(true);
+        $response = app(StateConcurrency::class)->run(fn () => response()->json($this->state()));
+        $durationMs = (hrtime(true) - $startedAt) / 1_000_000;
+        $bytes = strlen((string) $response->getContent());
+        $response->headers->set('Server-Timing', 'state;dur='.number_format($durationMs, 1, '.', ''));
+
+        if ($durationMs >= 1000 || $bytes >= 2 * 1024 * 1024) {
+            Log::warning('Karya state response is slow or large.', [
+                'user_id' => $user->id,
+                'duration_ms' => (int) round($durationMs),
+                'response_bytes' => $bytes,
+            ]);
+        }
+
+        return $response;
     }
 
     public function update(Request $request): JsonResponse

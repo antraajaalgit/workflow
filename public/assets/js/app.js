@@ -4,6 +4,9 @@ const $ = (s, r=document) => r.querySelector(s);
 const $$ = (s, r=document) => [...r.querySelectorAll(s)];
 
 let session = null;   // current signed-in user
+let pendingSession = null; // authenticated on the server; dashboard state not loaded yet
+let recurringSuspended = true;
+let recurringRun = null;
 let employeeAttendance = null;
 let employeeLeave = null;
 let adminAttendance = null;
@@ -216,27 +219,74 @@ function openRequestedTask(){
 
 async function signIn(email, password){
   const submit=$('#login-submit'), error=$('#login-error');
-  submit.disabled=true;submit.textContent='Signing in…';error.classList.add('hidden');
-  try { session = await Store.signIn(email, password); await Store.load(); session = userById(session.id);
-  } catch (e) { error.textContent=e.message;error.classList.remove('hidden');submit.disabled=false;submit.textContent='Sign in';return; }
-  $('#login').classList.add('hidden');
-  $('#app').classList.remove('hidden');
-  route = session.role==='client' ? 'my-requests' : 'dashboard';
-  buildNav(); renderWho(); updateBell(); render(); openRequestedTask();
+  submit.disabled=true;submit.textContent='Signing in…';error.classList.add('hidden');$('#login-retry').classList.add('hidden');
+  let authenticatedUser;
+  try {
+    authenticatedUser=await Store.signIn(email,password);
+    pendingSession=authenticatedUser;
+    $('#login-password').value='';
+    announceSessionChange('changed');
+  } catch(error) {
+    showLoginFailure(error.message);
+    return;
+  }
+  await initializeAuthenticatedApp(authenticatedUser);
+}
+function showLoginFailure(message,retryLabel=null){
+  const error=$('#login-error'),retry=$('#login-retry'),submit=$('#login-submit');
+  $('#app').classList.add('hidden');$('#login').classList.remove('hidden');
+  error.textContent=message;error.classList.remove('hidden');
+  retry.textContent=retryLabel||'Retry';retry.classList.toggle('hidden',!retryLabel);retry.disabled=false;
+  submit.disabled=false;submit.textContent='Sign in';
+}
+function resetAuthenticatedModules(){
+  employeeAttendance?.reset();employeeLeave?.reset();adminAttendance?.reset();adminLeave?.reset();adminHolidays?.reset();
+}
+function showSignedOut(message=''){
+  resetAuthenticatedModules();
+  session=null;pendingSession=null;recurringSuspended=true;Store.data=null;
+  $('#app').classList.add('hidden');$('#login').classList.remove('hidden');
+  $('#login-form').reset();$('#login-submit').disabled=false;$('#login-submit').textContent='Sign in';
+  $('#login-retry').classList.add('hidden');
+  if(message)showLoginFailure(message);else $('#login-error').classList.add('hidden');
+}
+async function initializeAuthenticatedApp(authenticatedUser){
+  try {
+    await Store.load();
+    const loadedUser=userById(authenticatedUser.id);
+    if(!loadedUser)throw Object.assign(new Error('Your account is no longer available. Please sign in again.'),{status:401,kind:'auth'});
+    session=loadedUser;pendingSession=null;recurringSuspended=false;
+    $('#login').classList.add('hidden');$('#app').classList.remove('hidden');
+    route=session.role==='client'?'my-requests':'dashboard';buildNav();renderWho();updateBell();render(); openRequestedTask();
+    setTimeout(()=>void runRecurringTasks(),0);
+  } catch(error) {
+    session=null;recurringSuspended=true;
+    if(error.status===401){showSignedOut(error.message);return;}
+    pendingSession=authenticatedUser;
+    showLoginFailure(`You are signed in, but Karya could not load the dashboard. ${error.message}`,'Retry dashboard');
+  }
+}
+async function retrySessionRecovery(){
+  const retry=$('#login-retry');retry.disabled=true;retry.textContent='Retrying…';$('#login-error').classList.add('hidden');
+  try {
+    const current=await Store.currentSession();
+    if(!current.userId){showSignedOut('Your session has expired. Please sign in again.');return;}
+    pendingSession=current.user||pendingSession;
+    await initializeAuthenticatedApp(pendingSession);
+  } catch(error) {
+    if(error.status===401){showSignedOut(error.message);return;}
+    showLoginFailure(`Karya still could not load the dashboard. ${error.message}`,'Retry dashboard');
+  }
 }
 async function signOut(){
   employeeAttendance?.reset();
-  employeeLeave?.reset();
-  adminAttendance?.reset();
-  adminLeave?.reset();
-  adminHolidays?.reset();
-  await Store.signOut();
-  toggleDrawer(false);
-  session = null;
-  $('#app').classList.add('hidden');
-  $('#login').classList.remove('hidden');
-  $('#login-form').reset();
-  $('#login-submit').disabled=false;$('#login-submit').textContent='Sign in';$('#login-error').classList.add('hidden');
+  recurringSuspended=true;
+  try{await Store.signOut();}
+  catch(error){
+    if(error.status===401){showSignedOut(error.message);announceSessionChange('signed-out');return;}
+    recurringSuspended=false;toast(error.message);return;
+  }
+  toggleDrawer(false);showSignedOut();announceSessionChange('signed-out');
 }
 function renderWho(){
   $('#whoami').innerHTML = `${avatar(session)}<div><b>${esc(session.name)}</b><span>${session.role==='client'?esc(session.company):(session.dept||'Owner')}</span></div>`;
@@ -1514,20 +1564,81 @@ setInterval(()=>{
   if(session && route === 'dashboard') render();
 }, 120000);
 
-// Materialize due recurring occurrences while the app is open. The server scheduler
-// performs the same check when the browser is closed.
-setInterval(async()=>{
-  if(!session||document.querySelector('.modal-scrim'))return;
+// Materialize due recurring occurrences while the app is open. This never blocks
+// dashboard startup, never overlaps in one tab, and uses Web Locks (when available)
+// so multiple tabs do not send the same state-changing request concurrently.
+const RECURRING_LEASE_KEY='karya:recurring-task-generation:last-attempt';
+function claimRecurringLease(){
   try{
+    const last=Number(localStorage.getItem(RECURRING_LEASE_KEY)||0);
+    if(Date.now()-last<55000)return false;
+    localStorage.setItem(RECURRING_LEASE_KEY,String(Date.now()));
+  }catch(_){/* Web Locks and the in-tab promise still prevent overlapping work. */}
+  return true;
+}
+async function runRecurringTasks(){
+  if(recurringSuspended||!session||recurringRun||document.querySelector('.modal-scrim'))return;
+  const generate=async()=>{
+    if(recurringSuspended||!session||!claimRecurringLease())return;
     const result=await Store.generateRecurringTasks();
     if(result.created>0){await Store.load();render();buildNav();toast(`🔁 ${result.created} recurring task${result.created===1?'':'s'} created`);}
-  }catch(_){/* The next scheduler/browser tick will retry. */}
-},60000);
+  };
+  recurringRun=(async()=>{
+    if(globalThis.navigator?.locks?.request){
+      return navigator.locks.request('karya-recurring-task-generation',{ifAvailable:true},lock=>lock?generate():undefined);
+    }
+    return generate();
+  })();
+  try{await recurringRun;}
+  catch(error){
+    if(error.status===401){showSignedOut(error.message);announceSessionChange('signed-out');return;}
+    if(error.status===419){
+      // Refresh the token with a safe GET. Do not repeat this POST; the next
+      // scheduled tick may run only after the session has been confirmed.
+      recurringSuspended=true;
+      try{
+        const current=await Store.currentSession();
+        if(!current.userId||current.userId!==session?.id){showSignedOut('Your session changed. Please sign in again.');return;}
+        recurringSuspended=false;
+      }catch(refreshError){
+        if(refreshError.status===401)showSignedOut(refreshError.message);
+      }
+    }
+  }finally{recurringRun=null;}
+}
+setInterval(()=>void runRecurringTasks(),60000);
 
 /* ============================================================
    GLOBAL WIRING
 ============================================================ */
+const sessionChannel=typeof BroadcastChannel==='function'?new BroadcastChannel('karya-session-v1'):null;
+function announceSessionChange(type){sessionChannel?.postMessage({type});}
+async function resumeBackgroundAfterSessionCheck(){
+  if(!session||!recurringSuspended)return;
+  try{
+    const current=await Store.currentSession();
+    if(!current.userId||current.userId!==session.id){showSignedOut('Your session changed. Please sign in again.');return;}
+    recurringSuspended=false;
+  }catch(error){if(error.status===401)showSignedOut(error.message);}
+}
+if(sessionChannel)sessionChannel.onmessage=async event=>{
+  if(event.data?.type==='signed-out'){
+    showSignedOut('You were signed out in another tab.');
+    return;
+  }
+  if(event.data?.type!=='changed')return;
+  try{
+    const current=await Store.currentSession();
+    if(!current.userId){showSignedOut('Your session has expired. Please sign in again.');return;}
+    if(!session||current.userId!==session.id){pendingSession=current.user;await initializeAuthenticatedApp(current.user);}
+  }catch(error){
+    if(error.status===401)showSignedOut(error.message);
+  }
+};
 $('#login-form').onsubmit=e=>{e.preventDefault();signIn($('#login-email').value.trim(),$('#login-password').value);};
+$('#login-retry').onclick=()=>void retrySessionRecovery();
+window.addEventListener('online',()=>void resumeBackgroundAfterSessionCheck());
+window.addEventListener('focus',()=>void resumeBackgroundAfterSessionCheck());
 $('#login-password-toggle').onclick=()=>{const input=$('#login-password');input.type=input.type==='password'?'text':'password';$('#login-password-toggle').textContent=input.type==='password'?'Show':'Hide';};
 $('#logout').onclick=signOut;
 $('#bell').onclick=()=>toggleDrawer(true);
@@ -1552,10 +1663,9 @@ function renderNotifs(){
 (async function boot(){
   try {
     const saved=await Store.currentSession();
-    if(saved.userId){try{await Store.generateRecurringTasks();}catch(_){}await Store.load();session=userById(saved.userId);$('#login').classList.add('hidden');$('#app').classList.remove('hidden');route=session.role==='client'?'my-requests':'dashboard';buildNav();renderWho();updateBell();render();openRequestedTask();}
+    if(saved.userId){pendingSession=saved.user;await initializeAuthenticatedApp(saved.user);}
   } catch (error) {
-    session = null;
-    document.body.innerHTML = `<div style="padding:40px;font-family:sans-serif"><h2>Karya could not connect to the server</h2><p>${esc(error.message)}</p></div>`;
-    return;
+    session=null;recurringSuspended=true;
+    showLoginFailure(`Karya could not connect to the server. ${error.message}`,'Retry connection');
   }
 })();

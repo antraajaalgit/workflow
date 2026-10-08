@@ -6,9 +6,11 @@ use App\Mail\TaskAssignment;
 use App\Services\RecurringTaskGenerator;
 use App\Services\StateConcurrency;
 use Carbon\CarbonImmutable;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\TestCase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Route;
 use Tests\IsolatedDatabase;
@@ -161,13 +163,51 @@ class TaskApiTest extends TestCase
     public function test_existing_state_routes_and_state_task_serialization(): void
     {
         $id = $this->task();
-        $this->getJson('/api/state')->assertOk()->assertJsonFragment(['id' => $id, 'ownerId' => 'one', 'ownerIds' => ['one']]);
+        $this->getJson('/api/state')->assertOk()->assertHeader('Server-Timing')
+            ->assertJsonFragment(['id' => $id, 'ownerId' => 'one', 'ownerIds' => ['one']]);
         foreach (['GET' => 'show', 'PUT' => 'update'] as $method => $action) {
             $route = Route::getRoutes()->match(Request::create('/api/state', $method));
             $this->assertSame('App\\Http\\Controllers\\StateController@'.$action, $route->getActionName());
         }
         // Exercise PUT authentication without invoking its MySQL-only full-state replacement.
         $this->withSession(['nagare_user_id' => null])->putJson('/api/state', [])->assertUnauthorized();
+    }
+
+    public function test_login_session_state_and_logout_use_the_same_session_identity(): void
+    {
+        DB::table('users')->where('id', 'one')->update(['password' => Hash::make('correct password')]);
+        $this->withSession(['nagare_user_id' => null]);
+
+        $login = $this->postJson('/api/session', ['email' => 'ONE@example.test', 'password' => 'correct password'])
+            ->assertOk()->assertJsonPath('userId', 'one')->assertJsonPath('user.id', 'one');
+        $this->assertSame('one', session('nagare_user_id'));
+        $this->assertNotEmpty($login->json('csrfToken'));
+        $this->getJson('/api/session')->assertOk()->assertJsonPath('userId', 'one');
+        $this->getJson('/api/state')->assertOk();
+
+        $logout = $this->deleteJson('/api/session')->assertOk()->assertJsonPath('signedOut', true);
+        $this->assertNotEmpty($logout->json('csrfToken'));
+        $this->getJson('/api/session')->assertOk()->assertJsonPath('userId', null);
+        $this->getJson('/api/state')->assertUnauthorized();
+    }
+
+    public function test_session_and_recurring_writes_enforce_csrf_and_expired_authentication(): void
+    {
+        $this->app->bind(ValidateCsrfToken::class, fn ($app) => new class($app, $app['encrypter']) extends ValidateCsrfToken
+        {
+            protected function runningUnitTests()
+            {
+                return false;
+            }
+        });
+        DB::table('users')->where('id', 'one')->update(['password' => Hash::make('correct password')]);
+
+        $this->withSession(['_token' => 'session-test-csrf', 'nagare_user_id' => null])
+            ->postJson('/api/session', ['email' => 'one@example.test', 'password' => 'correct password'], ['X-CSRF-TOKEN' => 'stale'])
+            ->assertStatus(419);
+        $this->withSession(['_token' => 'session-test-csrf', 'nagare_user_id' => null])
+            ->postJson('/api/recurring-tasks/generate', [], ['X-CSRF-TOKEN' => 'session-test-csrf'])
+            ->assertUnauthorized();
     }
 
     public function test_assignment_mail_reassignment_and_history_are_idempotent(): void

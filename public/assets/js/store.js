@@ -82,9 +82,50 @@ function seed() {
 
 const Store = {
   data: null,
+  _recurringRequest: null,
   headers(extra = {}) {
     const token = document.querySelector('meta[name="csrf-token"]')?.content;
     return { Accept: 'application/json', ...(token ? { 'X-CSRF-TOKEN': token } : {}), ...extra };
+  },
+
+  requestError(response, data, fallback, method, url, startedAt) {
+    const status = response?.status || 0;
+    const kind = response?.ok && data === null ? 'response' : status === 401 ? 'auth' : status === 419 ? 'csrf' : status >= 500 ? 'server' : status ? 'http' : 'network';
+    const details = Object.values(data?.errors || {}).flat().join(' ');
+    const message = status === 401
+      ? 'Your session has expired. Please sign in again.'
+      : status === 419
+        ? 'Your secure session changed. Please retry.'
+        : details || data?.message || fallback;
+    const error = new Error(message);
+    Object.assign(error, {status, kind, retryable: kind === 'network' || kind === 'response' || status === 419 || status >= 500});
+    if (typeof console !== 'undefined' && console.warn) {
+      console.warn('Karya request failed', {
+        method,
+        path: url,
+        status: status || null,
+        kind,
+        durationMs: Date.now() - startedAt,
+        online: typeof navigator === 'undefined' ? undefined : navigator.onLine,
+      });
+    }
+    return error;
+  },
+
+  async fetchJson(url, options = {}, fallback = 'Unable to complete the request') {
+    const method = options.method || 'GET';
+    const startedAt = Date.now();
+    let response;
+    try {
+      response = await fetch(url, {...options, credentials:'same-origin'});
+    } catch (_) {
+      throw this.requestError(null, null, 'Karya could not reach the server. Check your connection and try again.', method, url, startedAt);
+    }
+    let data = null;
+    try { data = await response.json(); } catch (_) {}
+    if (!response.ok) throw this.requestError(response, data, fallback, method, url, startedAt);
+    if (data === null) throw this.requestError(response, null, 'The server returned an invalid response. Please try again.', method, url, startedAt);
+    return data;
   },
 
   taskPayload(values) {
@@ -101,19 +142,20 @@ const Store = {
     for (let attempt=0; attempt<2; attempt++) {
       const token=document.querySelector('meta[name="csrf-token"]')?.content;
       const headers=this.headers ? this.headers({'Content-Type':'application/json'}) : {Accept:'application/json','Content-Type':'application/json',...(token?{'X-CSRF-TOKEN':token}:{})};
-      const response=await fetch(url,{method,credentials:'same-origin',headers,...(payload===undefined?{}:{body:JSON.stringify(payload)})});
-      if(response.status===419 && !attempt) {
-        const session=this.currentSession ? await this.currentSession() : await (await fetch('/api/session',{credentials:'same-origin',headers:{Accept:'application/json'}})).json();
-        if(!session.userId) throw new Error('Your session has expired. Please sign in again.');
-        const meta=document.querySelector('meta[name="csrf-token"]');if(meta&&session.csrfToken)meta.content=session.csrfToken;
-        continue;
+      try {
+        return await this.fetchJson(url,{method,headers,...(payload===undefined?{}:{body:JSON.stringify(payload)})},'Unable to save task');
+      } catch (error) {
+        if(error.status===419 && !attempt) {
+          const session=await this.currentSession();
+          if(!session.userId) {
+            const expired=new Error('Your session has expired. Please sign in again.');
+            Object.assign(expired,{status:401,kind:'auth',retryable:false});
+            throw expired;
+          }
+          continue;
+        }
+        throw error;
       }
-      const result=await response.json().catch(()=>({message:'Unable to save task'}));
-      if(!response.ok) {
-        const details=Object.values(result.errors||{}).flat().join(' ');
-        const error=new Error(details||result.message||'Unable to save task');error.status=response.status;throw error;
-      }
-      return result;
     }
   },
   taskRequest(method, id, suffix, payload) {
@@ -228,9 +270,7 @@ const Store = {
 
   async load() {
     await (this._saveQueue||Promise.resolve()).catch(()=>{});
-    const response = await fetch('/api/state', { headers: this.headers() });
-    if (!response.ok) throw new Error('Unable to load application data');
-    this.data = await response.json();
+    this.data = await this.fetchJson('/api/state', {headers:this.headers()}, 'Unable to load application data');
     this._baseline = JSON.parse(JSON.stringify(this.data));
     return this.data;
   },
@@ -262,19 +302,21 @@ const Store = {
       }
       snapshot._revision = source._revision;
       try {
-        let response;
+        let result;
         for (let attempt = 0; attempt < 2; attempt++) {
           const headers = this.headers ? this.headers({'Content-Type':'application/json'}) : {
             Accept:'application/json', 'Content-Type':'application/json',
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || ''
           };
-          response = await fetch('/api/state', {method:'PUT', headers, body:JSON.stringify({...snapshot,tasks:undefined})});
-          if (response.status !== 419 || attempt || !this.currentSession) break;
-          const session = await this.currentSession();
-          if (!session.userId) throw new Error('Your session has expired. Please sign in again.');
+          try {
+            result = await this.fetchJson('/api/state', {method:'PUT',headers,body:JSON.stringify({...snapshot,tasks:undefined})}, 'Unable to save application data');
+            break;
+          } catch (error) {
+            if (error.status !== 419 || attempt || !this.currentSession) throw error;
+            const current = await this.currentSession();
+            if (!current.userId) throw Object.assign(new Error('Your session has expired. Please sign in again.'), {status:401,kind:'auth',retryable:false});
+          }
         }
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.message || 'Unable to save application data');
         source._revision = result._revision;
         this._baseline = {...snapshot,_revision:result._revision};
         return result;
@@ -298,29 +340,46 @@ const Store = {
     return this.data;
   },
   async generateRecurringTasks() {
-    const response = await fetch('/api/recurring-tasks/generate', { method:'POST', headers:this.headers() });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.message || 'Unable to generate recurring tasks');
-    return data;
+    if (this._recurringRequest) return this._recurringRequest;
+    this._recurringRequest = this.fetchJson('/api/recurring-tasks/generate', {
+      method:'POST', headers:this.headers(),
+    }, 'Unable to generate recurring tasks').finally(() => { this._recurringRequest = null; });
+    return this._recurringRequest;
   },
   async currentSession() {
-    const response = await fetch('/api/session', { headers: this.headers() });
-    if (!response.ok) throw new Error('Unable to load session');
-    const data = await response.json();
+    // This safe GET is also the canonical way to refresh a stale CSRF token.
+    const data = await this.fetchJson('/api/session', {headers:{Accept:'application/json'}}, 'Unable to load session');
     this.setCsrf(data.csrfToken);
     return data;
   },
   async signIn(email, password) {
-    const response = await fetch('/api/session', { method: 'POST', headers: this.headers({ 'Content-Type': 'application/json' }), body: JSON.stringify({ email, password }) });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.message || 'Unable to sign in');
-    this.setCsrf(data.csrfToken);
-    return data.user;
+    for (let attempt=0; attempt<2; attempt++) {
+      try {
+        const data = await this.fetchJson('/api/session', {
+          method:'POST', headers:this.headers({'Content-Type':'application/json'}), body:JSON.stringify({email,password}),
+        }, 'Unable to sign in');
+        this.setCsrf(data.csrfToken);
+        return data.user;
+      } catch (error) {
+        // A 419 is rejected by Laravel before authentication runs, so one token
+        // refresh followed by one retry cannot duplicate a completed login.
+        if (error.status !== 419 || attempt) throw error;
+        await this.currentSession();
+      }
+    }
   },
   async signOut() {
-    const response = await fetch('/api/session', { method: 'DELETE', headers: this.headers() });
-    if (!response.ok) throw new Error('Unable to sign out');
-    this.setCsrf((await response.json()).csrfToken);
+    for (let attempt=0; attempt<2; attempt++) {
+      try {
+        const data = await this.fetchJson('/api/session', {method:'DELETE',headers:this.headers()}, 'Unable to sign out');
+        this.setCsrf(data.csrfToken);
+        return data;
+      } catch (error) {
+        if (error.status !== 419 || attempt) throw error;
+        const current = await this.currentSession();
+        if (!current.userId) return {signedOut:true,csrfToken:current.csrfToken};
+      }
+    }
   },
   async googleCalendarStatus() {
     const response = await fetch('/api/google-calendar/status', { headers: this.headers() });
