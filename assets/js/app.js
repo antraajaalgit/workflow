@@ -12,6 +12,7 @@ let adminHolidays = null;
 let route = 'dashboard';
 let routeParam = null;
 let tasksPage = 1;
+let historyPage = 1;
 let tasksProjectFilter = 'all';
 
 /* ---------- utils ---------- */
@@ -299,7 +300,7 @@ function buildNav(){
   }).join('');
   $$('#nav a').forEach(a => a.onclick = () => go(a.dataset.route));
 }
-function go(r, param=null){ route=r; routeParam=param; buildNav(); render(); }
+function go(r, param=null){ if(r==='history'&&route!=='history')historyPage=1;route=r; routeParam=param; buildNav(); render(); }
 
 /* ============================================================
    RENDER ROUTER
@@ -482,7 +483,8 @@ function viewHistory(){
   const tasks=S().tasks.filter(task=>taskInHistory(task,now))
     .filter(task=>session.role==='admin'||(task.ownerIds?.length?task.ownerIds:(task.ownerId?[task.ownerId]:[])).includes(session.id))
     .sort((a,b)=>b.stageAt-a.stageAt);
-  const cards=tasks.map(task=>{
+  const pageSize=12,totalPages=Math.max(1,Math.ceil(tasks.length/pageSize));historyPage=Math.min(Math.max(1,historyPage),totalPages);
+  const cards=tasks.slice((historyPage-1)*pageSize,historyPage*pageSize).map(task=>{
     const client=clientById(task.clientId),project=projectById(task.projectId);
     const owners=(task.ownerIds?.length?task.ownerIds:(task.ownerId?[task.ownerId]:[])).map(userById).filter(Boolean);
     const expiresAt=task.stageAt+TASK_HISTORY_MS;
@@ -495,7 +497,8 @@ function viewHistory(){
       <div class="muted small" style="margin-top:10px">Permanently deleted after ${new Date(expiresAt).toLocaleDateString()}</div>
     </article>`;
   }).join('');
-  return `<p class="muted" style="margin-bottom:16px">Completed tasks remain here for 30 days, then are permanently deleted. Projects are kept until an admin deletes them manually.</p><div class="task-card-grid">${cards||'<div class="empty"><div class="e-ic">🕘</div>No tasks completed in the last 30 days</div>'}</div>`;
+  const pagination=totalPages>1?`<div class="section-head" style="margin-top:14px"><button class="btn-ghost small" data-history-page="${historyPage-1}" ${historyPage===1?'disabled':''}>← Previous</button><span class="muted small">Page ${historyPage} of ${totalPages} · ${tasks.length} tasks</span><button class="btn-ghost small" data-history-page="${historyPage+1}" ${historyPage===totalPages?'disabled':''}>Next →</button></div>`:'';
+  return `<p class="muted" style="margin-bottom:16px">Completed tasks remain here for 30 days, then are permanently deleted. Projects are kept until an admin deletes them manually.</p><div class="task-card-grid">${cards||'<div class="empty"><div class="e-ic">🕘</div>No tasks completed in the last 30 days</div>'}</div>${pagination}`;
 }
 
 function filterProjectCards(query, cards, emptyState){
@@ -1384,6 +1387,7 @@ function bindView(){
   $$('[data-delete-task]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();deleteTask(btn.dataset.deleteTask);});
   const projectFilter=$('#tasks-project-filter'); if(projectFilter) projectFilter.onchange=()=>{tasksProjectFilter=projectFilter.value;tasksPage=1;render();};
   $$('[data-tasks-page]').forEach(btn=>btn.onclick=()=>{if(btn.disabled)return;tasksPage=Number(btn.dataset.tasksPage);render();});
+  $$('[data-history-page]').forEach(btn=>btn.onclick=()=>{if(btn.disabled)return;historyPage=Number(btn.dataset.historyPage);render();});
   const am=$('[data-add-member]'); if(am) am.onclick=()=>openTeamMember();
   $$('[data-edit-member]').forEach(b=>b.onclick=()=>openTeamMember(b.dataset.editMember));
   $$('[data-delete-member]').forEach(b=>b.onclick=()=>deleteTeamMember(b.dataset.deleteMember));

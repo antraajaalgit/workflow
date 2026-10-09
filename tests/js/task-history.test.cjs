@@ -36,13 +36,13 @@ for(const file of ['assets/js/app.js','public/assets/js/app.js']){
       clientById:id=>state.clients.find(client=>client.id===id),projectById:id=>state.projects.find(project=>project.id===id),
       userById:id=>state.users.find(user=>user.id===id),isTaskOwner:(task,id)=>ownerIds(task).includes(id),
       projectsByName:projects=>projects,tasksByProjectNameWithCompletedLast:tasks=>tasks,
-      tasksPage:1,tasksProjectFilter:'all',taskOwners:task=>ownerIds(task).map(id=>state.users.find(user=>user.id===id)).filter(Boolean),
+      tasksPage:1,historyPage:1,tasksProjectFilter:'all',taskOwners:task=>ownerIds(task).map(id=>state.users.find(user=>user.id===id)).filter(Boolean),
       taskProgressLabel:value=>value,avatar:()=>'',dueCountdown:()=>''});
     vm.runInContext(code.slice(code.indexOf('const esc ='),code.indexOf('const userById')),ctx);
     vm.runInContext(code.slice(code.indexOf('const TASK_HISTORY_MS'),code.indexOf('const compareNames')),ctx);
     vm.runInContext(code.slice(code.indexOf('function viewHistory(){'),code.indexOf('function filterProjectCards')),ctx);
     vm.runInContext(code.slice(code.indexOf('function viewTasks(){'),code.indexOf('async function completeTask')),ctx);
-    return {ctx};
+    return {ctx,state};
   }
 
   test(`${file}: admin History shows completed tasks for less than 30 days`,()=>{
@@ -65,5 +65,18 @@ for(const file of ['assets/js/app.js','public/assets/js/app.js']){
     assert.match(html,/data-complete-task="not-fully-complete"/);
     assert.doesNotMatch(html,/data-task="recent-mine"|data-task="recent-other"|data-task="boundary"|data-task="expired"/);
     assert.match(html,/>Project kept<\/option>/);
+  });
+
+  test(`${file}: History paginates completed tasks 12 per page`,()=>{
+    const {ctx,state}=setup('admin');
+    for(let i=0;i<13;i++)state.tasks.push({id:'page-'+i,ownerId:'team',title:'Paged '+String(i).padStart(2,'0'),status:'done',progress:'completed',stageAt:now-i*1000});
+    let html=ctx.viewHistory();
+    assert.equal((html.match(/<article /g)||[]).length,12);
+    assert.match(html,/Page 1 of 2 · 15 tasks/);
+    assert.match(html,/data-history-page="2"/);
+    ctx.historyPage=2;html=ctx.viewHistory();
+    assert.equal((html.match(/<article /g)||[]).length,3);
+    assert.match(html,/Page 2 of 2 · 15 tasks/);
+    assert.match(html,/data-history-page="1"/);
   });
 }
