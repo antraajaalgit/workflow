@@ -199,7 +199,6 @@ h1,h2,h3{font-weight:650;letter-spacing:-.01em}
 .st-in_progress{background:rgba(224,161,43,.15);color:var(--amber)}
 .st-review{background:rgba(122,92,62,.13);color:var(--accent)}
 .st-done{background:rgba(63,163,77,.14);color:var(--green)}
-.st-completed{background:rgba(63,163,77,.14);color:var(--green)}
 .st-blocked{background:rgba(217,74,61,.14);color:var(--red)}
 
 /* Client folder */

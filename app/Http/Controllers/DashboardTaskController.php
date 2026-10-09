@@ -29,7 +29,6 @@ class DashboardTaskController extends Controller
     }
 
     public function project(Request $request, ?string $id = null) { return $this->execute($request, 'project', $id); }
-    public function completeProject(Request $request, string $id) { return $this->execute($request, 'completeProject', $id); }
     public function deleteProject(Request $request, string $id) { return $this->execute($request, 'deleteProject', $id); }
     public function client(Request $request, ?string $id = null) { return $this->execute($request, 'client', $id); }
     public function deleteClient(Request $request, string $id) { return $this->execute($request, 'deleteClient', $id); }

@@ -19,9 +19,6 @@ class RecurringTaskGenerator
                 ->whereNotNull('recurring')
                 ->whereNotNull('next_recurrence_at_ms')
                 ->where('next_recurrence_at_ms', '<=', $nowMs)
-                ->where(function ($query) {
-                    $query->whereNull('project_id')->orWhereNotIn('project_id', DB::table('projects')->where('status', 'completed')->select('id'));
-                })
                 ->lockForUpdate()
                 ->get();
 

@@ -48,6 +48,17 @@ trait CompletedTaskCleanupAssertions
         foreach (['exactly_thirty','sixty'] as $id) $this->assertDatabaseMissing('tasks', ['id' => $id]);
     }
 
+    public function test_cleanup_deletes_project_task_but_preserves_its_project(): void
+    {
+        $now = $this->cleanupClock();
+        DB::table('projects')->insert(['id' => 'kept_project', 'client_id' => 'c_test', 'name' => 'Kept Project', 'status' => 'active']);
+        $id = $this->expiredTask('expired_project_task', $now-30*86400000, ['project_id' => 'kept_project']);
+
+        $this->assertSame(1, app(CompletedTaskPurger::class)->run()['deleted']);
+        $this->assertDatabaseMissing('tasks', ['id' => $id]);
+        $this->assertDatabaseHas('projects', ['id' => 'kept_project', 'name' => 'Kept Project']);
+    }
+
     public function test_cleanup_reopened_and_recompleted_task_restart_server_timer(): void
     {
         $now = $this->cleanupClock(); $id = $this->expiredTask('reopen', $now-60*86400000);

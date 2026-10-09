@@ -20,7 +20,6 @@ for(const file of ['assets/js/store.js','public/assets/js/store.js']){
  for(const [name,url,method,call] of [
   ['create project grid','/api/projects','POST',s=>s.saveProject(null,{name:'Grid',tasks:[{title:'Task'}],delete_ids:[]})],
   ['edit project grid','/api/projects/p1/tasks','PATCH',s=>s.saveProject('p1',{name:'Grid',tasks:[{id:'t1',title:'Task'}],delete_ids:[]})],
-  ['complete project','/api/projects/p1/complete','PATCH',s=>s.completeProject('p1')],
   ['delete project','/api/projects/p1','DELETE',s=>s.deleteProject('p1')],
   ['create client and link project','/api/clients','POST',s=>s.saveClient(null,{name:'Client',project_id:'p1',password:'test password'})],
   ['edit client and link project','/api/clients/c1','PATCH',s=>s.saveClient('c1',{name:'Client',project_id:'p1'})],

@@ -98,45 +98,6 @@ trait CompoundTaskAssertions
         $this->postJson('/api/projects', $stale)->assertConflict();
     }
 
-    public function test_project_completion_records_server_time_and_returns_it_in_state(): void
-    {
-        $state = $this->postJson('/api/projects', $this->grid())->assertCreated()->json('state');
-        $id = $state['projects'][0]['id'];
-        $completedAt = \Carbon\CarbonImmutable::parse('2026-10-09 12:30:00', 'Asia/Kolkata');
-        $this->travelTo($completedAt);
-
-        $response = $this->patchJson('/api/projects/'.$id.'/complete', ['_revision' => $state['_revision']])->assertOk();
-        $response->assertJsonPath('state.projects.0.status', 'completed')
-            ->assertJsonPath('state.projects.0.completedAt', $completedAt->getTimestampMs());
-        $this->assertDatabaseHas('projects', ['id' => $id, 'status' => 'completed', 'completed_at_ms' => $completedAt->getTimestampMs()]);
-        $this->assertDatabaseHas('activities', ['text' => 'admin completed project "Project"']);
-    }
-
-    public function test_only_admin_can_complete_a_project(): void
-    {
-        $state = $this->postJson('/api/projects', $this->grid())->assertCreated()->json('state');
-        $id = $state['projects'][0]['id'];
-        $this->withSession(['nagare_user_id' => 'one'])
-            ->patchJson('/api/projects/'.$id.'/complete', ['_revision' => $state['_revision']])
-            ->assertForbidden();
-        $this->assertDatabaseHas('projects', ['id' => $id, 'status' => 'active', 'completed_at_ms' => null]);
-    }
-
-    public function test_completed_projects_do_not_generate_more_recurring_tasks(): void
-    {
-        $now = \Carbon\CarbonImmutable::parse('2026-10-09 12:30:00', 'Asia/Kolkata');
-        $this->travelTo($now);
-        $state = $this->postJson('/api/projects', $this->grid())->assertCreated()->json('state');
-        $id = $state['projects'][0]['id'];
-        $taskId = $state['tasks'][0]['id'];
-        DB::table('tasks')->where('id', $taskId)->update(['recurring' => 'daily', 'next_recurrence_at_ms' => $now->subDay()->getTimestampMs()]);
-
-        $this->patchJson('/api/projects/'.$id.'/complete', $this->revision())->assertOk();
-
-        $this->assertSame(0, app(\App\Services\RecurringTaskGenerator::class)->generateDueTasks($now));
-        $this->assertDatabaseCount('tasks', 1);
-    }
-
     public function test_voice_brief_creates_message_task_history_and_notifications_together(): void
     {
         $this->withSession(['nagare_user_id' => 'client']);

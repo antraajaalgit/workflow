@@ -98,18 +98,6 @@ class DashboardTaskOperations
         $this->activity('deleted project "'.$project->name.'" ('.$id.')', $actor);
     }
 
-    public function completeProject(Request $request, object $actor, string $id): void
-    {
-        $project = $this->row('projects', $id);
-        abort_if($project->status === 'completed', 422, 'Project is already completed.');
-        DB::table('projects')->where('id', $id)->update([
-            'status' => 'completed',
-            'completed_at_ms' => now()->getTimestampMs(),
-            'updated_at' => now(),
-        ]);
-        $this->activity('completed project "'.$project->name.'"', $actor);
-    }
-
     private function linkProject(string $id, ?string $clientId, object $actor): void
     {
         $this->row('projects', $id);

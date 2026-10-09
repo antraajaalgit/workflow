@@ -36,7 +36,6 @@ Route::post('/admin/leave/{id}/reject', [AdminLeaveController::class, 'reject'])
 
     Route::post('/projects', [DashboardTaskController::class, 'project']);
     Route::patch('/projects/{id}/tasks', [DashboardTaskController::class, 'project']);
-    Route::patch('/projects/{id}/complete', [DashboardTaskController::class, 'completeProject']);
     Route::delete('/projects/{id}', [DashboardTaskController::class, 'deleteProject']);
     Route::post('/clients', [DashboardTaskController::class, 'client']);
     Route::patch('/clients/{id}', [DashboardTaskController::class, 'client']);

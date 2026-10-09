@@ -45,6 +45,6 @@
   <script src="{{ asset('assets/js/admin-attendance.js') }}?v=1"></script>
   <script src="{{ asset('assets/js/leave.js') }}?v=1"></script>
   <script src="{{ asset('assets/js/admin-leave.js') }}?v=1"></script>
-  <script src="{{ asset('assets/js/app.js') }}?v=59"></script>
+  <script src="{{ asset('assets/js/app.js') }}?v=60"></script>
 </body>
 </html>

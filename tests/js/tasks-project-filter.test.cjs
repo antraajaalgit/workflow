@@ -8,7 +8,7 @@ for(const file of ['assets/js/app.js','public/assets/js/app.js']){
   function setup(){
     const state={projects:[{id:'z',name:'Zulu'},{id:'a',name:'Alpha & Co'},{id:'empty',name:'Empty'}],tasks:[]};
     for(let i=0;i<14;i++) state.tasks.push({id:'a'+i,title:'Task '+String(i).padStart(2,'0'),projectId:'a',ownerId:i===13?'other':'team',status:'todo'});
-    state.tasks.push({id:'z1',title:'Zulu task',projectId:'z',ownerId:'team',status:'done'},
+    state.tasks.push({id:'z1',title:'Zulu task',projectId:'z',ownerId:'team',status:'done',progress:'completed'},
       {id:'s1',title:'Standalone',ownerId:'team'}, {id:'s2',title:'Standalone null',projectId:null,ownerId:'other'},
       {id:'shared',title:'Shared',projectId:'z',ownerId:'other',ownerIds:['other','team']});
     const select={value:'all'};let renders=0;
@@ -43,14 +43,13 @@ for(const file of ['assets/js/app.js','public/assets/js/app.js']){
     change('all');assert.equal(ids(ctx.viewTasks()).length,12);
     assert.equal(JSON.stringify(state),original);
   });
-  test(`${file}: team visibility and card actions survive project filtering`,()=>{
+  test(`${file}: team visibility and active card actions survive project filtering`,()=>{
     const {ctx,change}=setup();ctx.session={id:'team',role:'team'};
     change('project:a');ctx.tasksPage=2;assert.deepEqual(ids(ctx.viewTasks()),['a12']);
     change('standalone');assert.deepEqual(ids(ctx.viewTasks()),['s1']);
     change('project:z');const html=ctx.viewTasks();
-    assert.deepEqual(ids(html),file.startsWith('public')?['shared','z1']:['z1']);
-    assert.match(html,/data-edit-task="z1"/);assert.match(html,/data-delete-task="z1"/);
-    assert.match(html,/task-row-completed/);assert.doesNotMatch(html,/data-complete-task="z1"/);
+    assert.deepEqual(ids(html),file.startsWith('public')?['shared']:[]);
+    assert.doesNotMatch(html,/data-task="z1"|data-edit-task="z1"|data-delete-task="z1"/);
     change('project:a');assert.match(ctx.viewTasks(),/data-complete-task="a0"/);
   });
 }
