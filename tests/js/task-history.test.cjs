@@ -67,16 +67,16 @@ for(const file of ['assets/js/app.js','public/assets/js/app.js']){
     assert.match(html,/>Project kept<\/option>/);
   });
 
-  test(`${file}: History paginates completed tasks 12 per page`,()=>{
+  test(`${file}: History paginates completed tasks 15 per page`,()=>{
     const {ctx,state}=setup('admin');
-    for(let i=0;i<13;i++)state.tasks.push({id:'page-'+i,ownerId:'team',title:'Paged '+String(i).padStart(2,'0'),status:'done',progress:'completed',stageAt:now-i*1000});
+    for(let i=0;i<16;i++)state.tasks.push({id:'page-'+i,ownerId:'team',title:'Paged '+String(i).padStart(2,'0'),status:'done',progress:'completed',stageAt:now-i*1000});
     let html=ctx.viewHistory();
-    assert.equal((html.match(/<article /g)||[]).length,12);
-    assert.match(html,/Page 1 of 2 · 15 tasks/);
+    assert.equal((html.match(/<article /g)||[]).length,15);
+    assert.match(html,/Page 1 of 2 · 18 tasks/);
     assert.match(html,/data-history-page="2"/);
     ctx.historyPage=2;html=ctx.viewHistory();
     assert.equal((html.match(/<article /g)||[]).length,3);
-    assert.match(html,/Page 2 of 2 · 15 tasks/);
+    assert.match(html,/Page 2 of 2 · 18 tasks/);
     assert.match(html,/data-history-page="1"/);
   });
 }

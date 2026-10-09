@@ -483,7 +483,7 @@ function viewHistory(){
   const tasks=S().tasks.filter(task=>taskInHistory(task,now))
     .filter(task=>session.role==='admin'||(task.ownerIds?.length?task.ownerIds:(task.ownerId?[task.ownerId]:[])).includes(session.id))
     .sort((a,b)=>b.stageAt-a.stageAt);
-  const pageSize=12,totalPages=Math.max(1,Math.ceil(tasks.length/pageSize));historyPage=Math.min(Math.max(1,historyPage),totalPages);
+  const pageSize=15,totalPages=Math.max(1,Math.ceil(tasks.length/pageSize));historyPage=Math.min(Math.max(1,historyPage),totalPages);
   const cards=tasks.slice((historyPage-1)*pageSize,historyPage*pageSize).map(task=>{
     const client=clientById(task.clientId),project=projectById(task.projectId);
     const owners=(task.ownerIds?.length?task.ownerIds:(task.ownerId?[task.ownerId]:[])).map(userById).filter(Boolean);
