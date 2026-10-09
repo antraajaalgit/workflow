@@ -13,6 +13,8 @@ let route = 'dashboard';
 let routeParam = null;
 let tasksPage = 1;
 let historyPage = 1;
+let projectsPage = 1;
+let projectsSearch = '';
 let tasksProjectFilter = 'all';
 
 /* ---------- utils ---------- */
@@ -300,7 +302,7 @@ function buildNav(){
   }).join('');
   $$('#nav a').forEach(a => a.onclick = () => go(a.dataset.route));
 }
-function go(r, param=null){ if(r==='history'&&route!=='history')historyPage=1;route=r; routeParam=param; buildNav(); render(); }
+function go(r, param=null){ if(r==='history'&&route!=='history')historyPage=1;if(r==='projects'&&route!=='projects'){projectsPage=1;projectsSearch='';}route=r; routeParam=param; buildNav(); render(); }
 
 /* ============================================================
    RENDER ROUTER
@@ -449,8 +451,10 @@ function viewDashboard(){
 
 /* ---------- PROJECTS ---------- */
 function viewProjects(){
-  const projects = projectsByName(S().projects || []);
-  const cards = projects.map(p=>{
+  const allProjects=projectsByName(S().projects || []),search=String(projectsSearch||'').trim().toLocaleLowerCase();
+  const projects=search?allProjects.filter(project=>project.name.toLocaleLowerCase().includes(search)):allProjects;
+  const pageSize=18,totalPages=Math.max(1,Math.ceil(projects.length/pageSize));projectsPage=Math.min(Math.max(1,projectsPage),totalPages);
+  const cards = projects.slice((projectsPage-1)*pageSize,projectsPage*pageSize).map(p=>{
     const c=clientById(p.clientId); const tasks=S().tasks.filter(t=>t.projectId===p.id);
     const complete=tasks.filter(t=>t.status==='done').length;
     const progress=tasks.length?Math.round(complete/tasks.length*100):0;
@@ -472,10 +476,11 @@ function viewProjects(){
       <div class="project-card-foot"><span class="status-pill st-${p.status||'new'}">${esc(p.status||'active')}</span></div>
     </div>`;
   }).join('');
+  const pagination=totalPages>1?`<div class="section-head" style="margin-top:14px"><button class="btn-ghost small" data-projects-page="${projectsPage-1}" ${projectsPage===1?'disabled':''}>← Previous</button><span class="muted small">Page ${projectsPage} of ${totalPages} · ${projects.length} projects</span><button class="btn-ghost small" data-projects-page="${projectsPage+1}" ${projectsPage===totalPages?'disabled':''}>Next →</button></div>`:'';
   return `<div class="section-head"><p class="muted">Create a project and assign every task to a team member or admin.</p><button class="btn" data-add-project>+ Add project</button></div>
-    ${projects.length?`<div class="project-search"><span aria-hidden="true">⌕</span><label class="sr-only" for="project-search">Search projects by name</label><input id="project-search" type="search" placeholder="Search projects by name…" autocomplete="off"></div>`:''}
-    <div class="folder-grid" data-project-grid>${cards||'<div class="empty"><div class="e-ic">📌</div>No projects yet</div>'}</div>
-    ${projects.length?'<div class="empty hidden" data-project-search-empty><div class="e-ic">🔎</div>No projects match your search</div>':''}`;
+    ${allProjects.length?`<div class="project-search"><span aria-hidden="true">⌕</span><label class="sr-only" for="project-search">Search projects by name</label><input id="project-search" type="search" value="${esc(projectsSearch)}" placeholder="Search projects by name…" autocomplete="off"></div>`:''}
+    <div class="folder-grid" data-project-grid>${cards||(!allProjects.length?'<div class="empty"><div class="e-ic">📌</div>No projects yet</div>':'')}</div>
+    ${allProjects.length?`<div class="empty ${projects.length?'hidden':''}" data-project-search-empty><div class="e-ic">🔎</div>No projects match your search</div>`:''}${pagination}`;
 }
 
 function viewHistory(){
@@ -1278,7 +1283,7 @@ function viewTasks(){
   const activeTasks=S().tasks.filter(task=>!(task.status==='done'&&task.progress==='completed'));
   const visible=session.role==='team'?activeTasks.filter(t=>t.ownerId===session.id):adminMyTasks?activeTasks.filter(t=>(t.ownerIds?.length?t.ownerIds:(t.ownerId?[t.ownerId]:[])).includes(session.id)):activeTasks;
   const filtered=visible.filter(t=>tasksProjectFilter==='all'||(tasksProjectFilter==='standalone'?!t.projectId:'project:'+t.projectId===tasksProjectFilter));
-  const all=tasksByProjectNameWithCompletedLast(filtered),pageSize=12,totalPages=Math.max(1,Math.ceil(all.length/pageSize));tasksPage=Math.min(Math.max(1,tasksPage),totalPages);
+  const all=tasksByProjectNameWithCompletedLast(filtered),pageSize=15,totalPages=Math.max(1,Math.ceil(all.length/pageSize));tasksPage=Math.min(Math.max(1,tasksPage),totalPages);
   const cards=all.slice((tasksPage-1)*pageSize,tasksPage*pageSize).map(t=>{const client=clientById(t.clientId),project=projectById(t.projectId),owner=userById(t.ownerId),completed=t.status==='done'&&t.progress==='completed';return `<article class="task-card ${completed?'task-row-completed':''}" data-task="${t.id}">
     <div class="task-card-head"><span class="status-pill">${taskProgressLabel(t.progress)}</span><div class="project-actions"><button class="project-menu-btn" data-task-menu="${t.id}" aria-label="Task actions" aria-expanded="false">⋮</button><div class="project-menu hidden" data-task-menu-popup="${t.id}">${completed?'<button disabled><span>✓</span>Completed</button>':`<button data-complete-task="${t.id}"><span>✓</span>Mark completed</button>`}<button data-edit-task="${t.id}"><span>✏️</span>Edit task</button><button class="danger" data-delete-task="${t.id}"><span>🗑️</span>Delete task</button></div></div></div>
     ${client?`<div class="project-client">${esc(client.company)}</div>`:''}<h3>${esc(t.title)}</h3>
@@ -1368,7 +1373,7 @@ function bindView(){
   $$('[data-delete-client]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();deleteClient(btn.dataset.deleteClient);});
   const att=$('[data-add-team-task]');if(att)att.onclick=openTeamTaskForm;
   const ap=$('[data-add-project]'); if(ap) ap.onclick=()=>openProjectForm();
-  const projectSearch=$('#project-search');if(projectSearch)projectSearch.oninput=()=>filterProjectCards(projectSearch.value,$$('[data-project-card]'),$('[data-project-search-empty]'));
+  const projectSearch=$('#project-search');if(projectSearch)projectSearch.oninput=()=>{projectsSearch=projectSearch.value;projectsPage=1;render();const refreshed=$('#project-search');if(refreshed){refreshed.focus();refreshed.setSelectionRange?.(refreshed.value.length,refreshed.value.length);}};
   $$('[data-view-project]').forEach(card=>{card.onclick=event=>{if(event.target.closest('.project-actions'))return;openProjectDetails(card.dataset.viewProject);};card.onkeydown=event=>{if((event.key==='Enter'||event.key===' ')&&!event.target.closest('.project-actions')){event.preventDefault();openProjectDetails(card.dataset.viewProject);}};});
   $$('[data-project-menu]').forEach(btn=>btn.onclick=e=>{
     e.stopPropagation(); const popup=$(`[data-project-menu-popup="${btn.dataset.projectMenu}"]`);
@@ -1388,6 +1393,7 @@ function bindView(){
   const projectFilter=$('#tasks-project-filter'); if(projectFilter) projectFilter.onchange=()=>{tasksProjectFilter=projectFilter.value;tasksPage=1;render();};
   $$('[data-tasks-page]').forEach(btn=>btn.onclick=()=>{if(btn.disabled)return;tasksPage=Number(btn.dataset.tasksPage);render();});
   $$('[data-history-page]').forEach(btn=>btn.onclick=()=>{if(btn.disabled)return;historyPage=Number(btn.dataset.historyPage);render();});
+  $$('[data-projects-page]').forEach(btn=>btn.onclick=()=>{if(btn.disabled)return;projectsPage=Number(btn.dataset.projectsPage);render();});
   const am=$('[data-add-member]'); if(am) am.onclick=()=>openTeamMember();
   $$('[data-edit-member]').forEach(b=>b.onclick=()=>openTeamMember(b.dataset.editMember));
   $$('[data-delete-member]').forEach(b=>b.onclick=()=>deleteTeamMember(b.dataset.deleteMember));

@@ -7,7 +7,7 @@ for(const file of ['assets/js/app.js','public/assets/js/app.js']){
   const code=fs.readFileSync(file,'utf8');
   function setup(){
     const state={projects:[{id:'z',name:'Zulu'},{id:'a',name:'Alpha & Co'},{id:'empty',name:'Empty'}],tasks:[]};
-    for(let i=0;i<14;i++) state.tasks.push({id:'a'+i,title:'Task '+String(i).padStart(2,'0'),projectId:'a',ownerId:i===13?'other':'team',status:'todo'});
+    for(let i=0;i<17;i++) state.tasks.push({id:'a'+i,title:'Task '+String(i).padStart(2,'0'),projectId:'a',ownerId:i===16?'other':'team',status:'todo'});
     state.tasks.push({id:'z1',title:'Zulu task',projectId:'z',ownerId:'team',status:'done',progress:'completed'},
       {id:'s1',title:'Standalone',ownerId:'team'}, {id:'s2',title:'Standalone null',projectId:null,ownerId:'other'},
       {id:'shared',title:'Shared',projectId:'z',ownerId:'other',ownerIds:['other','team']});
@@ -32,20 +32,20 @@ for(const file of ['assets/js/app.js','public/assets/js/app.js']){
     assert.match(html,/<option value="all" selected>All Projects/);
     assert.ok(html.indexOf('Alpha &amp; Co</option>')<html.indexOf('Zulu</option>'));
     assert.match(html,/>Standalone Tasks<\/option>/);
-    assert.equal(ids(html).length,12);
+    assert.equal(ids(html).length,15);
     ctx.tasksPage=2;change('project:a');assert.equal(ctx.tasksPage,1);assert.equal(renders(),1);
-    html=ctx.viewTasks();assert.deepEqual(ids(html),Array.from({length:12},(_,i)=>'a'+i));
-    assert.match(html,/Page 1 of 2 · 14 tasks/);
+    html=ctx.viewTasks();assert.deepEqual(ids(html),Array.from({length:15},(_,i)=>'a'+i));
+    assert.match(html,/Page 1 of 2 · 17 tasks/);
     assert.match(html,/<option value="project:a" selected>/);
-    ctx.tasksPage=2;assert.deepEqual(ids(ctx.viewTasks()),['a12','a13']);
+    ctx.tasksPage=2;assert.deepEqual(ids(ctx.viewTasks()),['a15','a16']);
     change('standalone');assert.equal(ctx.tasksPage,1);assert.deepEqual(ids(ctx.viewTasks()),['s1','s2']);
     change('project:empty');assert.deepEqual(ids(ctx.viewTasks()),[]);assert.match(ctx.viewTasks(),/No tasks yet/);
-    change('all');assert.equal(ids(ctx.viewTasks()).length,12);
+    change('all');assert.equal(ids(ctx.viewTasks()).length,15);
     assert.equal(JSON.stringify(state),original);
   });
   test(`${file}: team visibility and active card actions survive project filtering`,()=>{
     const {ctx,change}=setup();ctx.session={id:'team',role:'team'};
-    change('project:a');ctx.tasksPage=2;assert.deepEqual(ids(ctx.viewTasks()),['a12']);
+    change('project:a');ctx.tasksPage=2;assert.deepEqual(ids(ctx.viewTasks()),['a15']);
     change('standalone');assert.deepEqual(ids(ctx.viewTasks()),['s1']);
     change('project:z');const html=ctx.viewTasks();
     assert.deepEqual(ids(html),file.startsWith('public')?['shared']:[]);
