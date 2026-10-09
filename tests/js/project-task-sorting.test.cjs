@@ -44,10 +44,10 @@ for(const file of ['assets/js/app.js','public/assets/js/app.js']){
     assert.equal(late.draft,'Unsaved late');assert.deepEqual(late._attachments,['late']);
     assert.deepEqual(list.rows.map(r=>r.number.textContent),[1,2,3,4]);
   });
-  test(`${file}: project form wires sorting on opening, date changes and Add Task`,()=>{
+  test(`${file}: project form sorts dated tasks and adds new task forms at the top`,()=>{
     const form=code.slice(code.indexOf('function openProjectForm'),code.indexOf('async function deleteProject'));
     assert.match(form,/const projectTasks=projectTasksByDueDate\(editing\?S\(\)\.tasks\.filter/);
     assert.match(form,/list\.onchange=.*matches\('\[data-pt-due\]'\).*sortProjectTaskRows\(list\)/);
-    assert.match(form,/'#add-project-task'.*onclick=.*sortProjectTaskRows\(list\)/);
+    assert.match(form,/'#add-project-task'.*onclick=.*insertAdjacentHTML\('afterbegin'.*renumber\(\)/);
   });
 }

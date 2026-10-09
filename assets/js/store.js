@@ -215,6 +215,7 @@ const Store = {
     this._saveQueue=operation;return operation;
   },
   saveProject(id,values){return this.compoundRequest(id?'/api/projects/'+encodeURIComponent(id)+'/tasks':'/api/projects',id?'PATCH':'POST',values);},
+  completeProject(id){return this.compoundRequest('/api/projects/'+encodeURIComponent(id)+'/complete','PATCH');},
   deleteProject(id){return this.compoundRequest('/api/projects/'+encodeURIComponent(id),'DELETE');},
   saveClient(id,values){return this.compoundRequest('/api/clients'+(id?'/'+encodeURIComponent(id):''),id?'PATCH':'POST',values);},
   deleteClient(id){return this.compoundRequest('/api/clients/'+encodeURIComponent(id),'DELETE');},

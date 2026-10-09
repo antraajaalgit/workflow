@@ -22,6 +22,11 @@ const ADMIN_ASSIGNEE_NAMES = {u_admin_agam:'Agam Bahri',u_admin_sales:'Jagmeet B
 const assigneeLabel = u => esc(u.role==='admin'?(ADMIN_ASSIGNEE_NAMES[u.id]||u.name):u.name);
 const clientById = id => S().clients.find(c => c.id === id);
 const projectById = id => (S().projects || []).find(p => p.id === id);
+const PROJECT_HISTORY_MS = 30 * 24 * 60 * 60 * 1000;
+const projectInHistory = (project, now=Date.now()) => {
+  const completedAt=Number(project?.completedAt);
+  return project?.status==='completed' && Number.isFinite(completedAt) && completedAt>0 && completedAt<=now && now-completedAt<=PROJECT_HISTORY_MS;
+};
 const compareNames = (a,b) => String(a||'').localeCompare(String(b||''),undefined,{sensitivity:'base',numeric:true});
 const projectsByName = projects => [...projects].sort((a,b)=>compareNames(a.name,b.name));
 const tasksByProjectName = tasks => [...tasks].sort((a,b)=>{
@@ -38,7 +43,7 @@ const departmentColor = name => {
   const color = departments().find(d=>d.name===name)?.color || DEPT_COLOR[name]?.fg || '#7a5c3e';
   return {fg:color,bg:`${color}20`};
 };
-const tasksOf = cid => S().tasks.filter(t => t.clientId === cid);
+const tasksOf = cid => S().tasks.filter(t => t.clientId === cid && projectById(t.projectId)?.status!=='completed');
 const initials = n => n.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
 const TASK_PROGRESS_OPTIONS = [['just_started','Just started'],['25','25% done'],['50','50% done'],['75','75% done'],['completed','Completed']];
 const taskProgressOptions = value => TASK_PROGRESS_OPTIONS.map(([id,label])=>`<option value="${id}" ${(value||'just_started')===id?'selected':''}>${label}</option>`).join('');
@@ -91,7 +96,8 @@ function andonLevel(t){
 const andonReads = new Map();
 const andonAlertKey = t => JSON.stringify([t.id, t.status, t.stageAt]);
 function andonScope(){
-  return session.role==='team' ? S().tasks.filter(t=>t.ownerId===session.id) : S().tasks;
+  const activeProjectTasks=S().tasks.filter(task=>projectById(task.projectId)?.status!=='completed');
+  return session.role==='team' ? activeProjectTasks.filter(t=>t.ownerId===session.id) : activeProjectTasks;
 }
 function readAndonAlerts(){
   if (!session) return new Set();
@@ -184,7 +190,7 @@ function toast(msg, cls=''){
 function delegate(text){
   return departments()[0]?.name || 'General';
 }
-function activeLoad(uid){ return S().tasks.filter(t=>(t.ownerIds?.length?t.ownerIds:(t.ownerId?[t.ownerId]:[])).includes(uid) && ACTIVE.includes(t.status) && t.progress!=='completed').length; }
+function activeLoad(uid){ return S().tasks.filter(t=>projectById(t.projectId)?.status!=='completed' && (t.ownerIds?.length?t.ownerIds:(t.ownerId?[t.ownerId]:[])).includes(uid) && ACTIVE.includes(t.status) && t.progress!=='completed').length; }
 
 /* ============================================================
    AUTH
@@ -254,6 +260,7 @@ const NAV = {
     {id:'dashboard', ic:'📊', label:'Dashboard'},
     {id:'my-tasks', ic:'👤', label:'My Tasks'},
     {id:'projects', ic:'📌', label:'Projects'},
+    {id:'history', ic:'🕘', label:'History'},
     {id:'andon', ic:'🚦', label:'Andon Board'},
     {id:'kanban', ic:'🗂️', label:'Kanban'},
     {id:'clients', ic:'📁', label:'Client Folders'},
@@ -271,6 +278,7 @@ const NAV = {
   team: [
     {id:'dashboard', ic:'📊', label:'My Dashboard'},
     {id:'tasks', ic:'✅', label:'Tasks'},
+    {id:'history', ic:'🕘', label:'History'},
     {id:'kanban', ic:'🗂️', label:'Kanban'},
     {id:'andon', ic:'🚦', label:'Andon Board'},
     {id:'inbox', ic:'💬', label:'Inbox'},
@@ -297,7 +305,7 @@ function go(r, param=null){ route=r; routeParam=param; buildNav(); render(); }
 /* ============================================================
    RENDER ROUTER
 ============================================================ */
-const TITLES = {'admin-holidays':'Holidays','admin-attendance':'Team Attendance', 'admin-leave':'Leave Requests',dashboard:'Dashboard', 'my-tasks':'My Tasks', projects:'Projects', andon:'Andon Board', kanban:'Kanban Flow', clients:'Client Folders', inbox:'Inbox', recurring:'Recurring Tasks', tasks:'Tasks', departments:'Departments', team:'Team & Workload', settings:'Settings', 'my-requests':'My Requests', 'new-request':'New Request', messages:'Messages', 'client-folder':'Client Folder'};
+const TITLES = {'admin-holidays':'Holidays','admin-attendance':'Team Attendance', 'admin-leave':'Leave Requests',dashboard:'Dashboard', 'my-tasks':'My Tasks', projects:'Projects', history:'History', andon:'Andon Board', kanban:'Kanban Flow', clients:'Client Folders', inbox:'Inbox', recurring:'Recurring Tasks', tasks:'Tasks', departments:'Departments', team:'Team & Workload', settings:'Settings', 'my-requests':'My Requests', 'new-request':'New Request', messages:'Messages', 'client-folder':'Client Folder'};
 function render(){
   const pageTitle = $('#page-title');
   const v = $('#view');
@@ -306,7 +314,7 @@ function render(){
   const R = {
     'admin-holidays': () => session.role==='admin' ? '<section id="admin-holidays" class="card"></section>' : '<p>Admin access required.</p>',
     'admin-attendance': () => session.role === 'admin' ? '<section id="admin-attendance" class="card"></section>' : '<p>Admin access required.</p>',
-    dashboard: viewDashboard, projects: viewProjects, andon: viewAndon, kanban: viewKanban,
+    dashboard: viewDashboard, projects: viewProjects, history: () => ['admin','team'].includes(session.role)?viewHistory():'<p>Staff access required.</p>', andon: viewAndon, kanban: viewKanban,
     clients: viewClients, 'client-folder': viewClientFolder, inbox: viewInbox,
     recurring: viewRecurring, tasks: viewTasks, 'my-tasks': () => session.role==='admin'?viewTasks():'<p>Admin access required.</p>', departments: viewDepartments, team: viewTeam, settings: viewSettings,
     'my-requests': viewMyRequests, 'new-request': viewNewRequest, messages: viewMessages,
@@ -441,7 +449,7 @@ function viewDashboard(){
 
 /* ---------- PROJECTS ---------- */
 function viewProjects(){
-  const projects = projectsByName(S().projects || []);
+  const projects = projectsByName((S().projects || []).filter(project=>project.status!=='completed'));
   const cards = projects.map(p=>{
     const c=clientById(p.clientId); const tasks=S().tasks.filter(t=>t.projectId===p.id);
     const complete=tasks.filter(t=>t.status==='done').length;
@@ -453,6 +461,7 @@ function viewProjects(){
           <button class="project-menu-btn" data-project-menu="${p.id}" aria-label="Project actions" aria-expanded="false">⋮</button>
           <div class="project-menu hidden" data-project-menu-popup="${p.id}">
             <button data-edit-project="${p.id}"><span>✏️</span>Edit project</button>
+            <button data-complete-project="${p.id}"><span>✓</span>Mark completed</button>
             <button class="danger" data-delete-project="${p.id}"><span>🗑️</span>Delete project</button>
           </div>
         </div>
@@ -468,6 +477,27 @@ function viewProjects(){
     ${projects.length?`<div class="project-search"><span aria-hidden="true">⌕</span><label class="sr-only" for="project-search">Search projects by name</label><input id="project-search" type="search" placeholder="Search projects by name…" autocomplete="off"></div>`:''}
     <div class="folder-grid" data-project-grid>${cards||'<div class="empty"><div class="e-ic">📌</div>No projects yet</div>'}</div>
     ${projects.length?'<div class="empty hidden" data-project-search-empty><div class="e-ic">🔎</div>No projects match your search</div>':''}`;
+}
+
+function viewHistory(){
+  const now=Date.now();
+  const projects=(S().projects||[]).filter(project=>projectInHistory(project,now))
+    .filter(project=>session.role==='admin'||S().tasks.some(task=>task.projectId===project.id&&(task.ownerIds?.length?task.ownerIds:(task.ownerId?[task.ownerId]:[])).includes(session.id)))
+    .sort((a,b)=>b.completedAt-a.completedAt);
+  const cards=projects.map(project=>{
+    const client=clientById(project.clientId),tasks=S().tasks.filter(task=>task.projectId===project.id);
+    const completed=tasks.filter(task=>task.status==='done'||task.progress==='completed').length;
+    const expiresAt=project.completedAt+PROJECT_HISTORY_MS;
+    return `<div class="project-card" data-view-project="${project.id}" role="button" tabindex="0" aria-label="View completed project ${esc(project.name)}">
+      <div class="project-card-head"><div class="project-icon">✓</div></div>
+      ${client?`<div class="project-client">${esc(client.company)}</div>`:''}
+      <h3>${esc(project.name)}</h3>
+      ${project.desc?`<p>${esc(project.desc)}</p>`:'<p class="muted">No project description</p>'}
+      <div class="project-progress"><div><span>Tasks completed</span><b>${completed}/${tasks.length}</b></div><div class="bar"><i style="width:${tasks.length?Math.round(completed/tasks.length*100):0}%"></i></div></div>
+      <div class="project-card-foot"><span class="status-pill st-completed">Completed ${new Date(project.completedAt).toLocaleDateString()}</span><span class="muted small">Visible until ${new Date(expiresAt).toLocaleDateString()}</span></div>
+    </div>`;
+  }).join('');
+  return `<p class="muted" style="margin-bottom:16px">Completed projects remain here for 30 days after completion.</p><div class="folder-grid">${cards||'<div class="empty"><div class="e-ic">🕘</div>No completed projects from the last 30 days</div>'}</div>`;
 }
 
 function filterProjectCards(query, cards, emptyState){
@@ -562,7 +592,7 @@ function openProjectForm(projectId=null){
   const bindRemove=()=>$$('[data-remove-project-task]',list).forEach(b=>b.onclick=()=>{b.closest('[data-project-task]').remove();renumber();});
   bindRemove();bindProjectTaskFiles(list);
   list.onchange=event=>{if(event.target.matches('[data-pt-due]'))sortProjectTaskRows(list);};
-  $('#add-project-task',modal).onclick=()=>{list.insertAdjacentHTML('beforeend',projectTaskRow($$('[data-project-task]',list).length));bindRemove();bindProjectTaskFiles(list);sortProjectTaskRows(list);};
+  $('#add-project-task',modal).onclick=()=>{list.insertAdjacentHTML('afterbegin',projectTaskRow($$('[data-project-task]',list).length));renumber();bindRemove();bindProjectTaskFiles(list);};
   $('#save-project',modal).onclick=async()=>{
     const name=$('#project-name',modal).value.trim(); const rows=$$('[data-project-task]',list);
     if(!name){toast('Enter a project name');return;}
@@ -599,6 +629,13 @@ async function deleteProject(projectId){
   try{const result=await Store.deleteProject(projectId);taskWriteWarnings(result);render();buildNav();toast('🗑️ Project deleted');}catch(error){toast(error.message);}
 }
 
+async function completeProject(projectId){
+  const project=projectById(projectId);if(!project||project.status==='completed'||session.role!=='admin')return;
+  const taskCount=S().tasks.filter(task=>task.projectId===projectId).length;
+  if(!confirm(`Mark "${project.name}" completed? It and its ${taskCount} task${taskCount===1?'':'s'} will move out of active lists and remain in History for 30 days.`))return;
+  try{const result=await Store.completeProject(projectId);taskWriteWarnings(result);go('history');toast('✅ Project moved to History');}catch(error){toast(error.message);}
+}
+
 /* ---------- ANDON BOARD ---------- */
 function andonRow(t){
   const lvl = andonLevel(t);
@@ -613,7 +650,8 @@ function andonRow(t){
   </div>`;
 }
 function viewAndon(){
-  const scope = session.role==='team' ? S().tasks.filter(t=>t.ownerId===session.id) : S().tasks;
+  const tasks=S().tasks.filter(task=>projectById(task.projectId)?.status!=='completed');
+  const scope = session.role==='team' ? tasks.filter(t=>t.ownerId===session.id) : tasks;
   const active = scope.filter(t=>ACTIVE.includes(t.status) && t.progress!=='completed')
     .sort((a,b)=> elapsedMs(b)-elapsedMs(a));
   const {amberMin, redMin} = S().settings;
@@ -661,7 +699,7 @@ function kcard(t){
   </div>`;
 }
 function viewKanban(){
-  let scope = S().tasks;
+  let scope = S().tasks.filter(task=>projectById(task.projectId)?.status!=='completed');
   if (session.role==='team') scope = scope.filter(t=>t.ownerId===session.id);
   const cols = COLS.map(col=>{
     const items = tasksByProjectName(scope.filter(t=>t.status===col.id));
@@ -728,7 +766,7 @@ function openClientForm(clientId=null){
   if(session.role!=='admin')return;
   const client=clientById(clientId),editing=!!client;
   const assignedProject=(S().projects||[]).find(p=>p.clientId===clientId);
-  const projectOpts=`<option value="">No project</option>`+(S().projects||[]).map(p=>`<option value="${p.id}" ${p.id===assignedProject?.id?'selected':''}>${esc(p.name)}${p.clientId&&p.clientId!==clientId?` · ${esc(clientById(p.clientId)?.company||'Another client')}`:''}</option>`).join('');
+  const projectOpts=`<option value="">No project</option>`+(S().projects||[]).filter(project=>project.status!=='completed').map(p=>`<option value="${p.id}" ${p.id===assignedProject?.id?'selected':''}>${esc(p.name)}${p.clientId&&p.clientId!==clientId?` · ${esc(clientById(p.clientId)?.company||'Another client')}`:''}</option>`).join('');
   const modal=document.createElement('div');modal.className='modal-scrim';
   modal.innerHTML=`<div class="modal"><div class="modal-head"><div><h2>${editing?'Edit client':'Add new client'}</h2><p class="muted small">${editing?'Keep the client profile and login details up to date.':'A client folder and client login will be created together.'}</p></div><button class="btn-ghost" data-close>✕</button></div>
     <div class="modal-body">
@@ -803,7 +841,7 @@ function viewInbox(){
 
 /* ---------- RECURRING ---------- */
 function viewRecurring(){
-  const rec = S().tasks.filter(t=>t.recurring);
+  const rec = S().tasks.filter(t=>projectById(t.projectId)?.status!=='completed'&&t.recurring);
   const rows = rec.map(t=>{
     const c=clientById(t.clientId), owner=userById(t.ownerId);
     return `<div class="row-item">
@@ -1148,7 +1186,7 @@ async function submitRequest(){
 function openTeamTaskForm(){
   if(session.role!=='team')return;
   const clientOpts=`<option value="">No client</option>`+S().clients.map(c=>`<option value="${c.id}">${esc(c.company)}</option>`).join('');
-  const projectOpts=`<option value="">No project</option>`+(S().projects||[]).map(p=>`<option value="${p.id}" data-client-id="${p.clientId||''}">${esc(p.name)}${p.clientId?` · ${esc(clientById(p.clientId)?.company||'No client')}`:''}</option>`).join('');
+  const projectOpts=`<option value="">No project</option>`+(S().projects||[]).filter(project=>project.status!=='completed').map(p=>`<option value="${p.id}" data-client-id="${p.clientId||''}">${esc(p.name)}${p.clientId?` · ${esc(clientById(p.clientId)?.company||'No client')}`:''}</option>`).join('');
   const modal=document.createElement('div');modal.className='modal-scrim';
   modal.innerHTML=`<div class="modal project-modal"><div class="modal-head"><div><h2>Add task</h2><p class="muted small">Create a task and assign it to yourself or an admin.</p></div><button class="btn-ghost" data-close>✕</button></div><div class="modal-body"><div class="form-row"><div class="field"><label>Client</label><select id="team-task-client">${clientOpts}</select></div><div class="field"><label>Project</label><select id="team-task-project">${projectOpts}</select></div></div><div id="team-task-fields">${projectTaskRow(0)}</div></div><div class="modal-foot"><button class="btn-ghost" data-close>Cancel</button><button class="btn" id="save-team-task">Create task</button></div></div>`;
   $('#modal-host').appendChild(modal);const close=()=>modal.remove();modal.querySelectorAll('[data-close]').forEach(b=>b.onclick=close);modal.onclick=e=>{if(e.target===modal)close();};
@@ -1244,7 +1282,8 @@ async function deleteTask(taskId,modal=null){
 ============================================================ */
 function viewTasks(){
   const adminMyTasks=session.role==='admin'&&typeof route!=='undefined'&&route==='my-tasks';
-  const visible=session.role==='team'?S().tasks.filter(t=>t.ownerId===session.id):adminMyTasks?S().tasks.filter(t=>(t.ownerIds?.length?t.ownerIds:(t.ownerId?[t.ownerId]:[])).includes(session.id)):S().tasks;
+  const activeTasks=S().tasks.filter(task=>projectById(task.projectId)?.status!=='completed');
+  const visible=session.role==='team'?activeTasks.filter(t=>t.ownerId===session.id):adminMyTasks?activeTasks.filter(t=>(t.ownerIds?.length?t.ownerIds:(t.ownerId?[t.ownerId]:[])).includes(session.id)):activeTasks;
   const filtered=visible.filter(t=>tasksProjectFilter==='all'||(tasksProjectFilter==='standalone'?!t.projectId:'project:'+t.projectId===tasksProjectFilter));
   const all=tasksByProjectNameWithCompletedLast(filtered),pageSize=12,totalPages=Math.max(1,Math.ceil(all.length/pageSize));tasksPage=Math.min(Math.max(1,tasksPage),totalPages);
   const cards=all.slice((tasksPage-1)*pageSize,tasksPage*pageSize).map(t=>{const client=clientById(t.clientId),project=projectById(t.projectId),owner=userById(t.ownerId),completed=t.status==='done'||t.progress==='completed';return `<article class="task-card ${completed?'task-row-completed':''}" data-task="${t.id}">
@@ -1256,7 +1295,7 @@ function viewTasks(){
     <div class="task-card-foot"><span>${owner?avatar(owner):''}<span><small>Assigned to</small><b>${owner?esc(owner.name):'Unassigned'}</b></span></span>${t.dueDate?`<time><small>Due</small><b>${new Date(t.dueDate).toLocaleDateString()}</b></time>`:''}</div>
   </article>`;}).join('');
   const pagination=totalPages>1?`<div class="section-head" style="margin-top:14px"><button class="btn-ghost small" data-tasks-page="${tasksPage-1}" ${tasksPage===1?'disabled':''}>← Previous</button><span class="muted small">Page ${tasksPage} of ${totalPages} · ${all.length} tasks</span><button class="btn-ghost small" data-tasks-page="${tasksPage+1}" ${tasksPage===totalPages?'disabled':''}>Next →</button></div>`:'';
-  const projectFilter=`<div class="field"><label for="tasks-project-filter">Project</label><select id="tasks-project-filter"><option value="all" ${tasksProjectFilter==='all'?'selected':''}>All Projects</option><option value="standalone" ${tasksProjectFilter==='standalone'?'selected':''}>Standalone Tasks</option>${projectsByName(S().projects||[]).map(p=>`<option value="project:${esc(p.id)}" ${tasksProjectFilter==='project:'+p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`;
+  const projectFilter=`<div class="field"><label for="tasks-project-filter">Project</label><select id="tasks-project-filter"><option value="all" ${tasksProjectFilter==='all'?'selected':''}>All Projects</option><option value="standalone" ${tasksProjectFilter==='standalone'?'selected':''}>Standalone Tasks</option>${projectsByName((S().projects||[]).filter(project=>project.status!=='completed')).map(p=>`<option value="project:${esc(p.id)}" ${tasksProjectFilter==='project:'+p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`;
   return `${projectFilter}<div class="section-head"><p class="muted">${session.role==='team'||adminMyTasks?'View, manage, and complete tasks assigned to you.':'Create and manage individual tasks across clients and projects.'}</p><button class="btn" ${session.role==='team'?'data-add-team-task':'data-new-task'}>+ New task</button></div><div class="task-card-grid">${cards||`<div class="empty"><div class="e-ic">✅</div>${adminMyTasks?'No tasks assigned to you':'No tasks yet'}</div>`}</div>${pagination}`;
 }
 
@@ -1269,7 +1308,7 @@ async function completeTask(taskId){
 
 function openNewTask(){
   const clientOpts=`<option value="">No client</option>`+S().clients.map(c=>`<option value="${c.id}">${esc(c.company)}</option>`).join('');
-  const projectOpts=`<option value="">No project</option>`+(S().projects||[]).map(p=>`<option value="${p.id}" data-client-id="${p.clientId||''}">${esc(p.name)}${p.clientId?` · ${esc(clientById(p.clientId)?.company||'No client')}`:''}</option>`).join('');
+  const projectOpts=`<option value="">No project</option>`+(S().projects||[]).filter(project=>project.status!=='completed').map(p=>`<option value="${p.id}" data-client-id="${p.clientId||''}">${esc(p.name)}${p.clientId?` · ${esc(clientById(p.clientId)?.company||'No client')}`:''}</option>`).join('');
   const modal=document.createElement('div');modal.className='modal-scrim';
   modal.innerHTML=`<div class="modal project-modal"><div class="modal-head"><div><h2>New task</h2><p class="muted small">Create a task and assign clear ownership.</p></div><button class="btn-ghost" data-close>✕</button></div><div class="modal-body"><div class="form-row"><div class="field"><label>Client</label><select id="task-client">${clientOpts}</select></div><div class="field"><label>Project</label><select id="task-project">${projectOpts}</select></div></div><div id="new-task-fields">${projectTaskRow(0)}</div></div><div class="modal-foot"><button class="btn-ghost" data-close>Cancel</button><button class="btn" id="create-task">Create task</button></div></div>`;
   $('#modal-host').appendChild(modal);const close=()=>modal.remove();modal.querySelectorAll('[data-close]').forEach(b=>b.onclick=close);modal.onclick=e=>{if(e.target===modal)close();};
@@ -1288,7 +1327,7 @@ function openNewRecurring(taskId=null){
   const task=taskId?S().tasks.find(t=>t.id===taskId&&t.recurring):null;if(taskId&&!task)return;
   const editing=!!task;
   const clientOpts=`<option value="">No client</option>`+S().clients.map(c=>`<option value="${c.id}" ${task?.clientId===c.id?'selected':''}>${esc(c.company)}</option>`).join('');
-  const projectOpts=`<option value="">No project</option>`+(S().projects||[]).map(p=>`<option value="${p.id}" data-client-id="${p.clientId||''}" ${task?.projectId===p.id?'selected':''}>${esc(p.name)}${p.clientId?` · ${esc(clientById(p.clientId)?.company||'No client')}`:''}</option>`).join('');
+  const projectOpts=`<option value="">No project</option>`+(S().projects||[]).filter(project=>project.status!=='completed'||project.id===task?.projectId).map(p=>`<option value="${p.id}" data-client-id="${p.clientId||''}" ${task?.projectId===p.id?'selected':''}>${esc(p.name)}${p.clientId?` · ${esc(clientById(p.clientId)?.company||'No client')}`:''}</option>`).join('');
   const memberOpts=assignableStaff().map(u=>`<option value="${u.id}" ${task?.ownerId===u.id?'selected':''}>${assigneeLabel(u)}</option>`).join('');
   const modal=document.createElement('div'); modal.className='modal-scrim';
   modal.innerHTML=`<div class="modal"><div class="modal-head"><h2>${editing?'Edit':'New'} repeating task</h2><button class="btn-ghost" data-close>✕</button></div>
@@ -1344,6 +1383,7 @@ function bindView(){
     popup.classList.toggle('hidden'); btn.setAttribute('aria-expanded',String(!popup.classList.contains('hidden')));
   });
   $$('[data-edit-project]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();openProjectForm(btn.dataset.editProject);});
+  $$('[data-complete-project]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();completeProject(btn.dataset.completeProject);});
   $$('[data-delete-project]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();deleteProject(btn.dataset.deleteProject);});
   const nr=$('[data-new-recurring]'); if(nr) nr.onclick=()=>openNewRecurring();
   $$('[data-edit-recurring]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();openNewRecurring(btn.dataset.editRecurring);});
